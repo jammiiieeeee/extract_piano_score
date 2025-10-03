@@ -1,0 +1,201 @@
+import cv2
+import os
+import numpy as np
+from PIL import Image, ImageDraw
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
+import io
+import argparse
+from pathlib import Path
+
+def crop_top_portion(image, ratio=0.32):
+    """
+    Crop the top portion of an image.
+    
+    Args:
+        image: OpenCV image (numpy array)
+        ratio: Portion of height to keep from top (default: 0.32 = 32%)
+    
+    Returns:
+        Cropped image
+    """
+    height, width = image.shape[:2]
+    crop_height = int(height * ratio)
+    return image[0:crop_height, 0:width]
+
+def stack_images_vertically(images):
+    """
+    Stack multiple images vertically.
+    
+    Args:
+        images: List of OpenCV images
+    
+    Returns:
+        Stacked image
+    """
+    if not images:
+        return None
+    
+    # Find the maximum width to ensure consistent stacking
+    max_width = max(img.shape[1] for img in images)
+    
+    # Resize all images to have the same width
+    resized_images = []
+    for img in images:
+        if img.shape[1] != max_width:
+            height = int(img.shape[0] * max_width / img.shape[1])
+            resized_img = cv2.resize(img, (max_width, height))
+            resized_images.append(resized_img)
+        else:
+            resized_images.append(img)
+    
+    # Stack vertically
+    stacked = np.vstack(resized_images)
+    return stacked
+
+def fit_image_to_a4(image, a4_width, a4_height, margin=50):
+    """
+    Resize image to fit A4 page with margins.
+    
+    Args:
+        image: OpenCV image
+        a4_width: A4 width in pixels
+        a4_height: A4 height in pixels
+        margin: Margin in pixels
+    
+    Returns:
+        Resized image that fits A4
+    """
+    available_width = a4_width - 2 * margin
+    available_height = a4_height - 2 * margin
+    
+    height, width = image.shape[:2]
+    
+    # Calculate scale to fit within available space
+    scale_width = available_width / width
+    scale_height = available_height / height
+    scale = min(scale_width, scale_height)
+    
+    # Resize image
+    new_width = int(width * scale)
+    new_height = int(height * scale)
+    
+    resized_image = cv2.resize(image, (new_width, new_height))
+    return resized_image
+
+def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots.pdf", crop_ratio=0.32, strips_per_page=5):
+    """
+    Create PDF with stacked screenshot strips.
+    
+    Args:
+        screenshots_dir: Directory containing screenshots
+        output_pdf: Output PDF filename
+        crop_ratio: Portion of height to keep from top
+        strips_per_page: Maximum number of strips per A4 page
+    """
+    # Get all screenshot files
+    screenshot_files = []
+    for ext in ['*.jpg', '*.jpeg', '*.png']:
+        screenshot_files.extend(Path(screenshots_dir).glob(ext))
+    
+    if not screenshot_files:
+        print(f"No screenshot files found in {screenshots_dir}")
+        return False
+    
+    # Sort files by name to maintain order
+    screenshot_files.sort()
+    print(f"Found {len(screenshot_files)} screenshots")
+    
+    # A4 dimensions in pixels (at 300 DPI)
+    a4_width = int(8.27 * 300)  # 2481 pixels
+    a4_height = int(11.69 * 300)  # 3507 pixels
+    
+    # Create PDF
+    pdf_path = os.path.join(os.getcwd(), output_pdf)
+    c = canvas.Canvas(pdf_path, pagesize=A4)
+    
+    cropped_strips = []
+    page_count = 0
+    
+    print(f"Processing screenshots...")
+    
+    for i, screenshot_file in enumerate(screenshot_files):
+        print(f"Processing {screenshot_file.name}...")
+        
+        # Load image
+        image = cv2.imread(str(screenshot_file))
+        if image is None:
+            print(f"Warning: Could not load {screenshot_file}")
+            continue
+        
+        # Crop top portion
+        cropped = crop_top_portion(image, crop_ratio)
+        cropped_strips.append(cropped)
+        
+        # When we have enough strips or reached the end, create a page
+        if len(cropped_strips) >= strips_per_page or i == len(screenshot_files) - 1:
+            # Stack all strips vertically
+            stacked_image = stack_images_vertically(cropped_strips)
+            
+            if stacked_image is not None:
+                # Fit to A4 size
+                fitted_image = fit_image_to_a4(stacked_image, a4_width, a4_height)
+                
+                # Convert to PIL Image for PDF
+                fitted_rgb = cv2.cvtColor(fitted_image, cv2.COLOR_BGR2RGB)
+                pil_image = Image.fromarray(fitted_rgb)
+                
+                # Create image buffer
+                img_buffer = io.BytesIO()
+                pil_image.save(img_buffer, format='JPEG', quality=95)
+                img_buffer.seek(0)
+                
+                # Add to PDF
+                page_count += 1
+                print(f"Creating page {page_count} with {len(cropped_strips)} strips")
+                
+                # Calculate position to center the image
+                img_width, img_height = fitted_image.shape[1], fitted_image.shape[0]
+                x = (A4[0] - img_width * 72/300) / 2  # Convert pixels to points
+                y = (A4[1] - img_height * 72/300) / 2
+                
+                c.drawImage(ImageReader(img_buffer), x, y, 
+                           width=img_width * 72/300, height=img_height * 72/300)
+                
+                c.showPage()
+            
+            # Reset for next page
+            cropped_strips = []
+    
+    # Save PDF
+    c.save()
+    print(f"\nPDF created successfully: {pdf_path}")
+    print(f"Total pages: {page_count}")
+    return True
+
+def main():
+    parser = argparse.ArgumentParser(description="Create PDF from screenshot strips")
+    parser.add_argument("screenshots_dir", help="Directory containing screenshots")
+    parser.add_argument("--output", default="stacked_screenshots.pdf", help="Output PDF filename")
+    parser.add_argument("--crop-ratio", type=float, default=0.32, help="Portion of height to keep from top (default: 0.32)")
+    parser.add_argument("--strips-per-page", type=int, default=5, help="Maximum strips per A4 page (default: 5)")
+    
+    args = parser.parse_args()
+    
+    if not os.path.exists(args.screenshots_dir):
+        print(f"Error: Directory '{args.screenshots_dir}' does not exist.")
+        return
+    
+    success = create_pdf_from_screenshots(
+        args.screenshots_dir, 
+        args.output, 
+        args.crop_ratio, 
+        args.strips_per_page
+    )
+    
+    if not success:
+        print("Failed to create PDF")
+
+if __name__ == "__main__":
+    main()
