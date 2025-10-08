@@ -5,6 +5,8 @@ from PIL import Image, ImageDraw
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase import pdfutils
+from reportlab.lib.units import inch
 import io
 import argparse
 from pathlib import Path
@@ -54,7 +56,7 @@ def stack_images_vertically(images):
     stacked = np.vstack(resized_images)
     return stacked
 
-def fit_image_to_a4(image, a4_width, a4_height, margin=50):
+def fit_image_to_a4(image, a4_width, a4_height, margin=50, title_space=0):
     """
     Resize image to fit A4 page with margins.
     
@@ -63,12 +65,13 @@ def fit_image_to_a4(image, a4_width, a4_height, margin=50):
         a4_width: A4 width in pixels
         a4_height: A4 height in pixels
         margin: Margin in pixels
+        title_space: Extra space reserved for title (pixels)
     
     Returns:
         Resized image that fits A4
     """
     available_width = a4_width - 2 * margin
-    available_height = a4_height - 2 * margin
+    available_height = a4_height - 2 * margin - title_space
     
     height, width = image.shape[:2]
     
@@ -84,7 +87,7 @@ def fit_image_to_a4(image, a4_width, a4_height, margin=50):
     resized_image = cv2.resize(image, (new_width, new_height))
     return resized_image
 
-def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots.pdf", crop_ratio=0.32, strips_per_page=5):
+def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots.pdf", crop_ratio=0.32, strips_per_page=6, song_title=None):
     """
     Create PDF with stacked screenshot strips.
     
@@ -93,6 +96,7 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
         output_pdf: Output PDF filename
         crop_ratio: Portion of height to keep from top
         strips_per_page: Maximum number of strips per A4 page
+        song_title: Title to display on first page
     """
     # Get all screenshot files
     screenshot_files = []
@@ -139,8 +143,12 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
             stacked_image = stack_images_vertically(cropped_strips)
             
             if stacked_image is not None:
-                # Fit to A4 size
-                fitted_image = fit_image_to_a4(stacked_image, a4_width, a4_height)
+                page_count += 1
+                is_first_page = (page_count == 1)
+                title_space_pixels = 120 if (is_first_page and song_title) else 0  # Reserve space for title
+                
+                # Fit to A4 size (account for title space on first page)
+                fitted_image = fit_image_to_a4(stacked_image, a4_width, a4_height, title_space=title_space_pixels)
                 
                 # Convert to PIL Image for PDF
                 fitted_rgb = cv2.cvtColor(fitted_image, cv2.COLOR_BGR2RGB)
@@ -151,14 +159,31 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
                 pil_image.save(img_buffer, format='JPEG', quality=95)
                 img_buffer.seek(0)
                 
-                # Add to PDF
-                page_count += 1
                 print(f"Creating page {page_count} with {len(cropped_strips)} strips")
                 
-                # Calculate position to center the image
+                # Add title on first page
+                if is_first_page and song_title:
+                    # Set font and size for title
+                    c.setFont("Helvetica-Bold", 24)
+                    
+                    # Calculate title position (centered horizontally, with top padding)
+                    title_width = c.stringWidth(song_title, "Helvetica-Bold", 24)
+                    title_x = (A4[0] - title_width) / 2
+                    title_y = A4[1] - 60  # 60 points from top (about 0.83 inches)
+                    
+                    # Draw title
+                    c.drawString(title_x, title_y, song_title)
+                
+                # Calculate position to center the image (adjust for title on first page)
                 img_width, img_height = fitted_image.shape[1], fitted_image.shape[0]
                 x = (A4[0] - img_width * 72/300) / 2  # Convert pixels to points
-                y = (A4[1] - img_height * 72/300) / 2
+                
+                if is_first_page and song_title:
+                    # Position image below title with padding
+                    y = A4[1] - 100 - (img_height * 72/300)  # 100 points from top to account for title
+                else:
+                    # Center vertically
+                    y = (A4[1] - img_height * 72/300) / 2
                 
                 c.drawImage(ImageReader(img_buffer), x, y, 
                            width=img_width * 72/300, height=img_height * 72/300)
@@ -179,7 +204,8 @@ def main():
     parser.add_argument("screenshots_dir", help="Directory containing screenshots")
     parser.add_argument("--output", default="stacked_screenshots.pdf", help="Output PDF filename")
     parser.add_argument("--crop-ratio", type=float, default=0.32, help="Portion of height to keep from top (default: 0.32)")
-    parser.add_argument("--strips-per-page", type=int, default=5, help="Maximum strips per A4 page (default: 5)")
+    parser.add_argument("--strips-per-page", type=int, default=6, help="Maximum strips per A4 page (default: 6)")
+    parser.add_argument("--title", help="Song title to display on first page")
     
     args = parser.parse_args()
     
@@ -191,7 +217,8 @@ def main():
         args.screenshots_dir, 
         args.output, 
         args.crop_ratio, 
-        args.strips_per_page
+        args.strips_per_page,
+        args.title
     )
     
     if not success:

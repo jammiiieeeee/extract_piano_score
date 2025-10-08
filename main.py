@@ -155,58 +155,95 @@ def extract_screenshots(video_path, start_time=2, interval=12, detection_method=
     
     screenshot_count = 0
     
+    # Create log file
+    log_filename = f"{sanitized_name}_log.txt"
+    log_path = os.path.join(main_folder, log_filename)
+    
     if detection_method == 'time':
         print(f"Using time-based method: screenshots every {interval} seconds starting at {start_time}s")
-        success = _extract_time_based(cap, fps, duration, start_time, interval, screenshots_dir, screenshot_count)
+        success = _extract_time_based(cap, fps, duration, start_time, interval, screenshots_dir, screenshot_count, log_path, sanitized_name)
     else:
         print(f"Using change-based method: detecting {change_threshold*100}% change in top 20% of frame")
-        success = _extract_change_based(cap, fps, duration, start_time, change_threshold, screenshots_dir, screenshot_count)
+        print(f"Log file will be saved to: {log_path}")
+        success = _extract_change_based(cap, fps, duration, start_time, change_threshold, screenshots_dir, screenshot_count, log_path, sanitized_name)
     
     cap.release()
     return success, screenshots_dir
 
-def _extract_time_based(cap, fps, duration, start_time, interval, screenshots_dir, screenshot_count):
+def _extract_time_based(cap, fps, duration, start_time, interval, screenshots_dir, screenshot_count, log_path, sanitized_name):
     """Extract screenshots at fixed time intervals"""
+    import time
+    
     current_time = start_time
+    process_start_time = time.time()
+    last_progress_update = 0
+    
+    # Initialize log file
+    with open(log_path, 'w', encoding='utf-8') as log_file:
+        log_file.write(f"Video Analysis Log - {sanitized_name}\n")
+        log_file.write(f"Video Duration: {duration:.2f} seconds\n")
+        log_file.write(f"Method: Time-based (every {interval}s)\n")
+        log_file.write(f"Start Time: {start_time}s\n")
+        log_file.write("=" * 50 + "\n\n")
     
     while current_time < duration:
-        print(f"Processing timestamp: {current_time:.1f}s")
-        
         # Calculate frame number for current time
         frame_number = int(current_time * fps)
-        print(f"Seeking to frame: {frame_number}")
         
         # Set video position to the desired frame
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
         
-        # Verify the position was set correctly
-        actual_frame = cap.get(cv2.CAP_PROP_POS_FRAMES)
-        actual_time = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
-        print(f"Actual frame position: {actual_frame}, actual time: {actual_time:.1f}s")
-        
         # Read the frame
         ret, frame = cap.read()
-        print(f"Frame read result: ret={ret}, frame is None: {frame is None if ret else 'N/A'}")
         
         if ret:
+            with open(log_path, 'a', encoding='utf-8') as log_file:
+                log_file.write(f">>> SCREENSHOT CAPTURED at {current_time:.1f}s (time-based interval)\n")
             success = _save_screenshot(frame, current_time, screenshot_count, screenshots_dir)
             if success:
                 screenshot_count += 1
         else:
-            print(f"Warning: Could not read frame at {current_time:.1f}s")
+            with open(log_path, 'a', encoding='utf-8') as log_file:
+                log_file.write(f"Warning: Could not read frame at {current_time:.1f}s\n")
             if current_time + interval >= duration:
-                print("Reached end of video")
                 break
         
         # Move to next time interval
         current_time += interval
+        
+        # Update progress indicator every 0.2 seconds
+        current_real_time = time.time()
+        if current_real_time - last_progress_update >= 0.2:
+            progress_percent = (current_time / duration) * 100
+            elapsed_time = current_real_time - process_start_time
+            if progress_percent > 0:
+                estimated_total_time = elapsed_time * (100 / progress_percent)
+                remaining_time = estimated_total_time - elapsed_time
+                remaining_str = f"{int(remaining_time//60):02d}:{int(remaining_time%60):02d}"
+            else:
+                remaining_str = "--:--"
+            
+            bar_length = 40
+            filled_length = int(bar_length * progress_percent / 100)
+            bar = '█' * filled_length + '-' * (bar_length - filled_length)
+            print(f"\rProgress: [{bar}] {progress_percent:.1f}% ({current_time:.1f}s/{duration:.1f}s) - {screenshot_count} screenshots - ETA: {remaining_str}", end='', flush=True)
+            last_progress_update = current_real_time
     
-    print(f"\nCompleted! Extracted {screenshot_count} screenshots.")
+    # Final log entry
+    with open(log_path, 'a', encoding='utf-8') as log_file:
+        log_file.write(f"\n" + "=" * 50 + "\n")
+        log_file.write(f"Analysis completed at {duration:.1f}s\n")
+        log_file.write(f"Total screenshots captured: {screenshot_count}\n")
+    
+    print(f"\n\nCompleted! Extracted {screenshot_count} screenshots.")
     print(f"Screenshots saved in: {screenshots_dir}")
+    print(f"Log saved to: {log_path}")
     return True
 
-def _extract_change_based(cap, fps, duration, start_time, change_threshold, screenshots_dir, screenshot_count):
+def _extract_change_based(cap, fps, duration, start_time, change_threshold, screenshots_dir, screenshot_count, log_path, sanitized_name):
     """Extract screenshots based on content changes"""
+    import time
+    
     # Start from the beginning or specified start time
     cap.set(cv2.CAP_PROP_POS_MSEC, start_time * 1000)
     
@@ -219,6 +256,18 @@ def _extract_change_based(cap, fps, duration, start_time, change_threshold, scre
     print(f"Analyzing video for content changes (threshold: {change_threshold*100}%)...")
     print(f"Checking frames every {0.2}s ({check_interval_frames} frames)")
     
+    # Initialize log file
+    with open(log_path, 'w', encoding='utf-8') as log_file:
+        log_file.write(f"Video Analysis Log - {sanitized_name}\n")
+        log_file.write(f"Video Duration: {duration:.2f} seconds\n")
+        log_file.write(f"Change Threshold: {change_threshold*100}%\n")
+        log_file.write(f"Start Time: {start_time}s\n")
+        log_file.write("=" * 50 + "\n\n")
+    
+    # Progress tracking
+    process_start_time = time.time()
+    last_progress_update = 0
+    
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -228,28 +277,54 @@ def _extract_change_based(cap, fps, duration, start_time, change_threshold, scre
         frames_since_last_screenshot += 1
         current_time = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
         
+        # Update progress indicator every 0.2 seconds (real time)
+        current_real_time = time.time()
+        if current_real_time - last_progress_update >= 0.2:
+            progress_percent = (current_time / duration) * 100
+            elapsed_time = current_real_time - process_start_time
+            if progress_percent > 0:
+                estimated_total_time = elapsed_time * (100 / progress_percent)
+                remaining_time = estimated_total_time - elapsed_time
+                remaining_str = f"{int(remaining_time//60):02d}:{int(remaining_time%60):02d}"
+            else:
+                remaining_str = "--:--"
+            
+            bar_length = 40
+            filled_length = int(bar_length * progress_percent / 100)
+            bar = '█' * filled_length + '-' * (bar_length - filled_length)
+            print(f"\rProgress: [{bar}] {progress_percent:.1f}% ({current_time:.1f}s/{duration:.1f}s) - {screenshot_count} screenshots - ETA: {remaining_str}", end='', flush=True)
+            last_progress_update = current_real_time
+        
         # Check for changes every 0.2 seconds
         if frame_count % check_interval_frames == 0:
             if previous_frame is not None:
                 change_percentage = _calculate_frame_change_percentage(previous_frame, frame, 0.2)
-                print(f"Time {current_time:.1f}s: {change_percentage:.1f}% different")
+                
+                # Log to file
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"Time {current_time:.1f}s: {change_percentage:.1f}% different\n")
                 
                 # Check if change is over 70% - abort if so
                 if change_percentage >= 70.0:
-                    print(f"\n>>> MAJOR SCENE CHANGE DETECTED at {current_time:.1f}s ({change_percentage:.1f}% >= 70%)")
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f"\n>>> MAJOR SCENE CHANGE DETECTED at {current_time:.1f}s ({change_percentage:.1f}% >= 70%)\n")
+                        log_file.write(f">>> ABORTING CAPTURE PROCESS\n")
+                    print(f"\n\n>>> MAJOR SCENE CHANGE DETECTED at {current_time:.1f}s ({change_percentage:.1f}% >= 70%)")
                     print(">>> ABORTING CAPTURE PROCESS - generating PDF with current screenshots")
                     break
                 
                 # Check if change exceeds threshold and minimum interval has passed
                 if change_percentage >= (change_threshold * 100) and frames_since_last_screenshot >= min_interval_frames:
-                    print(f"\n>>> SIGNIFICANT CHANGE DETECTED at {current_time:.1f}s ({change_percentage:.1f}% >= {change_threshold*100}%)")
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f"\n>>> SCREENSHOT CAPTURED at {current_time:.1f}s ({change_percentage:.1f}% >= {change_threshold*100}%)\n")
                     success = _save_screenshot(frame, current_time, screenshot_count, screenshots_dir)
                     if success:
                         screenshot_count += 1
                         frames_since_last_screenshot = 0
             else:
                 # Save first frame after start time
-                print(f"\n>>> SAVING INITIAL FRAME at {current_time:.1f}s")
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"\n>>> INITIAL SCREENSHOT CAPTURED at {current_time:.1f}s\n")
                 success = _save_screenshot(frame, current_time, screenshot_count, screenshots_dir)
                 if success:
                     screenshot_count += 1
@@ -258,13 +333,19 @@ def _extract_change_based(cap, fps, duration, start_time, change_threshold, scre
         # Update previous frame every 0.2 seconds for comparison
         if frame_count % check_interval_frames == 0:
             previous_frame = frame.copy()
-        
-        # Progress indicator every 10 seconds
-        if frame_count % (fps * 10) == 0:
-            print(f"Progress: {current_time:.1f}s / {duration:.1f}s - {screenshot_count} screenshots captured")
+    
+    # Final progress update
+    print(f"\rProgress: [{'█' * 40}] 100.0% ({duration:.1f}s/{duration:.1f}s) - {screenshot_count} screenshots")
+    
+    # Final log entry
+    with open(log_path, 'a', encoding='utf-8') as log_file:
+        log_file.write(f"\n" + "=" * 50 + "\n")
+        log_file.write(f"Analysis completed at {duration:.1f}s\n")
+        log_file.write(f"Total screenshots captured: {screenshot_count}\n")
     
     print(f"\nCompleted! Extracted {screenshot_count} screenshots using change detection.")
     print(f"Screenshots saved in: {screenshots_dir}")
+    print(f"Log saved to: {log_path}")
     return True
 
 def _calculate_frame_change_percentage(frame1, frame2, top_ratio=0.2):
@@ -311,51 +392,36 @@ def _save_screenshot(frame, current_time, screenshot_count, screenshots_dir):
     """Save a screenshot with robust error handling"""
     # Check if frame is valid
     if frame is None or frame.size == 0:
-        print(f"Warning: Empty frame at {current_time:.1f}s")
         return False
-    
-    print(f"Frame shape: {frame.shape}, dtype: {frame.dtype}")
         
     # Create filename with timestamp
     timestamp_str = f"{int(current_time//60):02d}m{int(current_time%60):02d}s"
     filename = f"screenshot_{screenshot_count+1:03d}_{timestamp_str}.jpg"
     filepath = os.path.join(screenshots_dir, filename)
     
-    print(f"Attempting to save to: {filepath}")
-    print(f"Directory exists: {os.path.exists(os.path.dirname(filepath))}")
-    
     # Save the frame
     success = cv2.imwrite(filepath, frame)
-    print(f"cv2.imwrite returned: {success}")
     
     # If standard save failed, try alternative methods
     if not success or not os.path.exists(filepath):
-        print("Standard save failed, trying alternative methods...")
-        
         # Method 1: Try with encoded filename
         try:
             encoded_filepath = filepath.encode('utf-8').decode('utf-8')
             success = cv2.imwrite(encoded_filepath, frame)
             if success and os.path.exists(encoded_filepath):
-                print("✓ Success with UTF-8 encoding")
                 filepath = encoded_filepath
             else:
                 raise Exception("UTF-8 encoding failed")
         except Exception as e:
-            print(f"UTF-8 encoding failed: {e}")
-            
             # Method 2: Use cv2.imencode and write manually
             try:
                 ret, buffer = cv2.imencode('.jpg', frame)
                 if ret:
                     with open(filepath, 'wb') as f:
                         f.write(buffer)
-                    print("✓ Success with manual file writing")
                 else:
                     raise Exception("cv2.imencode failed")
             except Exception as e:
-                print(f"Manual writing failed: {e}")
-                
                 # Method 3: Use temporary filename and rename
                 try:
                     temp_filename = f"temp_screenshot_{screenshot_count+1}.jpg"
@@ -363,30 +429,18 @@ def _save_screenshot(frame, current_time, screenshot_count, screenshots_dir):
                     
                     success = cv2.imwrite(temp_filepath, frame)
                     if success and os.path.exists(temp_filepath):
-                        # Try to rename to desired filename
                         try:
                             os.rename(temp_filepath, filepath)
-                            print("✓ Success with temporary file method")
                         except:
-                            # If rename fails, keep the temp name
                             filepath = temp_filepath
                             filename = temp_filename
-                            print(f"✓ Saved with temporary filename: {filename}")
                     else:
-                        raise Exception("Temp file creation failed")
+                        return False
                 except Exception as e:
-                    print(f"✗ All save methods failed: {e}")
                     return False
     
     # Check if file was actually created
-    if os.path.exists(filepath):
-        file_size = os.path.getsize(filepath)
-        print(f"✓ Saved screenshot {screenshot_count+1}: {os.path.basename(filepath)} (at {current_time:.1f}s)")
-        print(f"  File size: {file_size} bytes")
-        return True
-    else:
-        print(f"✗ File was not created at {filepath}")
-        return False
+    return os.path.exists(filepath)
 
 def main():
     parser = argparse.ArgumentParser(description="Extract screenshots from video files at regular intervals or based on content changes")
@@ -398,7 +452,7 @@ def main():
     parser.add_argument("--test", action="store_true", help="Test mode: only check video properties without extracting screenshots")
     parser.add_argument("--create-pdf", action="store_true", help="Create PDF after extracting screenshots")
     parser.add_argument("--crop-ratio", type=float, default=0.32, help="Portion of height to keep from top for PDF (default: 0.32)")
-    parser.add_argument("--strips-per-page", type=int, default=7, help="Maximum strips per A4 page (default: 7)")
+    parser.add_argument("--strips-per-page", type=int, default=6, help="Maximum strips per A4 page (default: 6)")
     
     args = parser.parse_args()
     
@@ -494,7 +548,8 @@ def main():
                         screenshots_dir, 
                         pdf_path, 
                         args.crop_ratio, 
-                        args.strips_per_page
+                        args.strips_per_page,
+                        sanitized_name  # Pass song title
                     )
                     
                     if success:
