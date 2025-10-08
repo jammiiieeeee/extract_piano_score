@@ -613,7 +613,7 @@ def detect_progress_bar(frame, top_ratio=0.32):
                     max_continuous_height = max(max_continuous_height, current_height)
                     
                     # If we found a significant vertical line
-                    if max_continuous_height > top_height * 0.3:  # At least 30% of region height
+                    if max_continuous_height > top_height * 0.2:  # At least 30% of region height
                         progress_bar_candidates.append({
                             'x_start': x,
                             'x_end': x + strip_width,
@@ -707,9 +707,9 @@ def detect_progress_bar_with_debug(frame, current_time, screenshot_count, debug_
     hsv = cv2.cvtColor(top_region, cv2.COLOR_BGR2HSV)
     
     # Create mask for non-black and non-white pixels
-    black_threshold = 190
+    black_threshold = 180
     white_value_threshold = 250 
-    white_saturation_threshold = 40  
+    white_saturation_threshold = 40
     
     # Create masks
     not_black_mask = hsv[:, :, 2] > black_threshold
