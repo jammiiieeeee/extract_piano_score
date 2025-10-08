@@ -235,7 +235,12 @@ def _extract_time_based(cap, fps, duration, start_time, interval, screenshots_di
         log_file.write(f"Analysis completed at {duration:.1f}s\n")
         log_file.write(f"Total screenshots captured: {screenshot_count}\n")
     
-    print(f"\n\nCompleted! Extracted {screenshot_count} screenshots.")
+    # Remove duplicate screenshots
+    removed_count = remove_duplicate_screenshots(screenshots_dir, top_ratio=0.2)
+    final_count = screenshot_count - removed_count
+    
+    print(f"\n\nCompleted! Extracted {screenshot_count} screenshots, removed {removed_count} duplicates.")
+    print(f"Final count: {final_count} unique screenshots.")
     print(f"Screenshots saved in: {screenshots_dir}")
     print(f"Log saved to: {log_path}")
     return True
@@ -343,7 +348,12 @@ def _extract_change_based(cap, fps, duration, start_time, change_threshold, scre
         log_file.write(f"Analysis completed at {duration:.1f}s\n")
         log_file.write(f"Total screenshots captured: {screenshot_count}\n")
     
-    print(f"\nCompleted! Extracted {screenshot_count} screenshots using change detection.")
+    # Remove duplicate screenshots
+    removed_count = remove_duplicate_screenshots(screenshots_dir, top_ratio=0.2)
+    final_count = screenshot_count - removed_count
+    
+    print(f"\nCompleted! Extracted {screenshot_count} screenshots using change detection, removed {removed_count} duplicates.")
+    print(f"Final count: {final_count} unique screenshots.")
     print(f"Screenshots saved in: {screenshots_dir}")
     print(f"Log saved to: {log_path}")
     return True
@@ -387,6 +397,118 @@ def _calculate_frame_change_percentage(frame1, frame2, top_ratio=0.2):
     change_percentage = (changed_pixels / total_pixels) * 100
     
     return change_percentage
+
+def remove_duplicate_screenshots(screenshots_dir, similarity_threshold=0.04, top_ratio=0.2):
+    """
+    Remove duplicate screenshots by comparing their similarity.
+    Only compares the top portion of the images as specified by top_ratio.
+    
+    Args:
+        screenshots_dir (str): Directory containing screenshots
+        similarity_threshold (float): Threshold for considering images as duplicates (0.0-1.0)
+        top_ratio (float): Ratio of top portion to analyze (default: 0.2 = 20%)
+        
+    Returns:
+        int: Number of duplicate screenshots removed
+    """
+    import hashlib
+    from pathlib import Path
+    
+    # Get all screenshot files
+    screenshot_files = [f for f in Path(screenshots_dir).glob("*.jpg") if "screenshot_" in f.name]
+    screenshot_files = sorted(screenshot_files, key=lambda x: int(x.name.split('_')[1]))  # Sort by sequence number
+    
+    if len(screenshot_files) <= 1:
+        return 0
+    
+    removed_count = 0
+    kept_files = [screenshot_files[0]]  # Always keep the first screenshot
+    
+    print(f"Checking {len(screenshot_files)} screenshots for duplicates...")
+    
+    for i in range(1, len(screenshot_files)):
+        current_file = screenshot_files[i]
+        is_duplicate = False
+        
+        # Compare with all previously kept files
+        for kept_file in kept_files:
+            if are_images_similar(str(kept_file), str(current_file), similarity_threshold, top_ratio):
+                print(f"  Removing duplicate: {current_file.name} (similar to {kept_file.name})")
+                os.remove(current_file)
+                removed_count += 1
+                is_duplicate = True
+                break
+        
+        if not is_duplicate:
+            kept_files.append(current_file)
+    
+    print(f"Removed {removed_count} duplicate screenshots")
+    return removed_count
+
+
+def are_images_similar(image1_path, image2_path, threshold=0.04, top_ratio=0.2):
+    """
+    Compare two images and return True if they are similar (below the change threshold).
+    Uses the same logic as detect_frame_change but for image files.
+    
+    Args:
+        image1_path (str): Path to first image
+        image2_path (str): Path to second image
+        threshold (float): Threshold for considering change significant (default: 0.04 = 4%)
+        top_ratio (float): Ratio of top portion to analyze (default: 0.2 = 20%)
+        
+    Returns:
+        bool: True if images are similar (change percentage is below threshold)
+    """
+    try:
+        img1 = cv2.imread(image1_path)
+        img2 = cv2.imread(image2_path)
+        
+        if img1 is None or img2 is None:
+            return False
+        
+        # Get dimensions
+        height1, width1 = img1.shape[:2]
+        height2, width2 = img2.shape[:2]
+        
+        # Calculate top height for both images
+        top_height1 = int(height1 * top_ratio)
+        top_height2 = int(height2 * top_ratio)
+        
+        # Extract top portions
+        top1 = img1[0:top_height1, 0:width1]
+        top2 = img2[0:top_height2, 0:width2]
+        
+        # Resize top portions to same dimensions if needed
+        if top1.shape[:2] != top2.shape[:2]:
+            # Use the smaller dimensions to resize both
+            min_height = min(top_height1, top_height2)
+            min_width = min(width1, width2)
+            
+            top1 = cv2.resize(top1, (min_width, min_height))
+            top2 = cv2.resize(top2, (min_width, min_height))
+        
+        # Convert to grayscale for comparison
+        gray1 = cv2.cvtColor(top1, cv2.COLOR_BGR2GRAY)
+        gray2 = cv2.cvtColor(top2, cv2.COLOR_BGR2GRAY)
+        
+        # Calculate absolute difference
+        diff = cv2.absdiff(gray1, gray2)
+        
+        # Threshold the difference (pixels with change > 30 intensity levels)
+        _, thresh = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
+        
+        # Calculate percentage of changed pixels
+        total_pixels = top1.shape[0] * top1.shape[1]  # height * width
+        changed_pixels = cv2.countNonZero(thresh)
+        change_percentage = changed_pixels / total_pixels
+        
+        # Return True if the change percentage is below the threshold (meaning they're similar)
+        return change_percentage < threshold
+    except Exception as e:
+        # If comparison fails for any reason, assume they're not duplicates
+        return False
+
 
 def _save_screenshot(frame, current_time, screenshot_count, screenshots_dir):
     """Save a screenshot with robust error handling"""
