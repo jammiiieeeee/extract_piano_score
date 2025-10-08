@@ -262,3 +262,11 @@ Time 202.0s: 11.9% different
 >>> SCREENSHOT CAPTURED at 202.0s (11.9% >= 4.0%)
 Progress bar detected at 202.0s: x=418-435 (width=17px)
 Progress bar merged from frame at 203.0s
+Time 204.0s: 0.3% different
+Time 205.0s: 0.3% different
+Time 206.0s: 0.3% different
+Time 207.0s: 0.3% different
+Time 208.0s: 0.3% different
+Time 209.0s: 0.3% different
+Time 210.0s: 0.3% different
+Time 211.0s: 0.3% different
