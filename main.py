@@ -162,12 +162,13 @@ def extract_screenshots(video_path, start_time=2, interval=12, detection_method=
     if detection_method == 'time':
         print(f"Using time-based method: screenshots every {interval} seconds starting at {start_time}s")
         success = _extract_time_based(cap, fps, duration, start_time, interval, screenshots_dir, screenshot_count, log_path, sanitized_name)
+        cap.release()
     else:
         print(f"Using change-based method: detecting {change_threshold*100}% change in top 20% of frame")
         print(f"Log file will be saved to: {log_path}")
         success = _extract_change_based(cap, fps, duration, start_time, change_threshold, screenshots_dir, screenshot_count, log_path, sanitized_name)
+        # cap.release() is now called inside _extract_change_based after B screenshots are captured
     
-    cap.release()
     return success, screenshots_dir
 
 def _extract_time_based(cap, fps, duration, start_time, interval, screenshots_dir, screenshot_count, log_path, sanitized_name):
@@ -257,6 +258,7 @@ def _extract_change_based(cap, fps, duration, start_time, change_threshold, scre
     min_interval_frames = int(fps * 2)  # Minimum 2 seconds between screenshots
     frames_since_last_screenshot = 0
     check_interval_frames = max(1, int(fps * 0.2))  # Check every 0.2 seconds
+    screenshot_times = []  # Track times when screenshots A were taken
     
     print(f"Analyzing video for content changes (threshold: {change_threshold*100}%)...")
     print(f"Checking frames every {0.2}s ({check_interval_frames} frames)")
@@ -321,23 +323,59 @@ def _extract_change_based(cap, fps, duration, start_time, change_threshold, scre
                 # Check if change exceeds threshold and minimum interval has passed
                 if change_percentage >= (change_threshold * 100) and frames_since_last_screenshot >= min_interval_frames:
                     with open(log_path, 'a', encoding='utf-8') as log_file:
-                        log_file.write(f"\n>>> SCREENSHOT CAPTURED at {current_time:.1f}s ({change_percentage:.1f}% >= {change_threshold*100}%)\n")
+                        log_file.write(f"\n>>> SCREENSHOT A CAPTURED at {current_time:.1f}s ({change_percentage:.1f}% >= {change_threshold*100}%)\n")
                     success = _save_screenshot(frame, current_time, screenshot_count, screenshots_dir)
                     if success:
+                        screenshot_times.append(current_time)
                         screenshot_count += 1
                         frames_since_last_screenshot = 0
             else:
                 # Save first frame after start time
                 with open(log_path, 'a', encoding='utf-8') as log_file:
-                    log_file.write(f"\n>>> INITIAL SCREENSHOT CAPTURED at {current_time:.1f}s\n")
+                    log_file.write(f"\n>>> INITIAL SCREENSHOT A CAPTURED at {current_time:.1f}s\n")
                 success = _save_screenshot(frame, current_time, screenshot_count, screenshots_dir)
                 if success:
+                    screenshot_times.append(current_time)
                     screenshot_count += 1
                     frames_since_last_screenshot = 0
         
         # Update previous frame every 0.2 seconds for comparison
         if frame_count % check_interval_frames == 0:
             previous_frame = frame.copy()
+    
+    # Now capture the B screenshots (2.5 seconds after each A screenshot)
+    print(f"\n\nCapturing B screenshots (2.5 seconds after each A screenshot)...")
+    b_screenshot_count = 0
+    
+    for i, a_time in enumerate(screenshot_times):
+        b_time = a_time + 2.5  # 2.5 seconds after A screenshot
+        if b_time < duration:
+            # Set video position to B time
+            cap.set(cv2.CAP_PROP_POS_MSEC, b_time * 1000)
+            ret, b_frame = cap.read()
+            
+            if ret:
+                # Save B screenshot with special naming convention
+                b_success = _save_screenshot_b(b_frame, b_time, i + 1, screenshots_dir)
+                if b_success:
+                    b_screenshot_count += 1
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f">>> SCREENSHOT B CAPTURED at {b_time:.1f}s (for A screenshot {i+1})\n")
+                else:
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f">>> Failed to save B screenshot at {b_time:.1f}s\n")
+            else:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f">>> Could not read frame for B screenshot at {b_time:.1f}s\n")
+    
+    print(f"Captured {b_screenshot_count} B screenshots")
+    
+    # Merge B screenshots with A screenshots and cleanup
+    print("Merging B screenshots with A screenshots...")
+    _merge_b_to_a_screenshots(screenshots_dir, log_path)
+    
+    # Release the video capture object now that we're done with B screenshots
+    cap.release()
     
     # Final progress update
     print(f"\rProgress: [{'█' * 40}] 100.0% ({duration:.1f}s/{duration:.1f}s) - {screenshot_count} screenshots")
@@ -346,7 +384,9 @@ def _extract_change_based(cap, fps, duration, start_time, change_threshold, scre
     with open(log_path, 'a', encoding='utf-8') as log_file:
         log_file.write(f"\n" + "=" * 50 + "\n")
         log_file.write(f"Analysis completed at {duration:.1f}s\n")
-        log_file.write(f"Total screenshots captured: {screenshot_count}\n")
+        log_file.write(f"Total A screenshots captured: {screenshot_count}\n")
+        log_file.write(f"Total B screenshots captured: {b_screenshot_count}\n")
+        log_file.write(f"B screenshots merged and deleted\n")
     
     # Remove duplicate screenshots
     removed_count = remove_duplicate_screenshots(screenshots_dir, top_ratio=0.2)
@@ -563,6 +603,147 @@ def _save_screenshot(frame, current_time, screenshot_count, screenshots_dir):
     
     # Check if file was actually created
     return os.path.exists(filepath)
+
+def _save_screenshot_b(frame, current_time, a_screenshot_num, screenshots_dir):
+    """Save a B screenshot with robust error handling"""
+    # Check if frame is valid
+    if frame is None or frame.size == 0:
+        return False
+        
+    # Create filename with timestamp for B screenshot
+    timestamp_str = f"{int(current_time//60):02d}m{int(current_time%60):02d}s"
+    filename = f"screenshot_{a_screenshot_num:03d}_B_{timestamp_str}.jpg"
+    filepath = os.path.join(screenshots_dir, filename)
+    
+    # Save the frame
+    success = cv2.imwrite(filepath, frame)
+    
+    # If standard save failed, try alternative methods
+    if not success or not os.path.exists(filepath):
+        # Method 1: Try with encoded filename
+        try:
+            encoded_filepath = filepath.encode('utf-8').decode('utf-8')
+            success = cv2.imwrite(encoded_filepath, frame)
+            if success and os.path.exists(encoded_filepath):
+                filepath = encoded_filepath
+            else:
+                raise Exception("UTF-8 encoding failed")
+        except Exception as e:
+            # Method 2: Use cv2.imencode and write manually
+            try:
+                ret, buffer = cv2.imencode('.jpg', frame)
+                if ret:
+                    with open(filepath, 'wb') as f:
+                        f.write(buffer)
+                else:
+                    raise Exception("cv2.imencode failed")
+            except Exception as e:
+                # Method 3: Use temporary filename and rename
+                try:
+                    temp_filename = f"temp_screenshot_B_{a_screenshot_num}.jpg"
+                    temp_filepath = os.path.join(screenshots_dir, temp_filename)
+                    
+                    success = cv2.imwrite(temp_filepath, frame)
+                    if success and os.path.exists(temp_filepath):
+                        try:
+                            os.rename(temp_filepath, filepath)
+                        except:
+                            filepath = temp_filepath
+                            filename = temp_filename
+                    else:
+                        return False
+                except Exception as e:
+                    return False
+    
+    # Check if file was actually created
+    return os.path.exists(filepath)
+
+def _merge_b_to_a_screenshots(screenshots_dir, log_path):
+    """
+    Merge the left 20% of each B screenshot to the corresponding A screenshot and delete B screenshots.
+    """
+    from pathlib import Path
+    import numpy as np
+    
+    # Get all A and B screenshot files
+    screenshot_files = list(Path(screenshots_dir).glob("screenshot_*.jpg"))
+    a_files = [f for f in screenshot_files if "_B_" not in f.name]
+    b_files = [f for f in screenshot_files if "_B_" in f.name]
+    
+    # Sort A files by number
+    a_files = sorted(a_files, key=lambda x: int(x.name.split('_')[1]))
+    
+    merged_count = 0
+    deleted_count = 0
+    
+    with open(log_path, 'a', encoding='utf-8') as log_file:
+        log_file.write(f"\n--- MERGING B SCREENSHOTS ---\n")
+    
+    for a_file in a_files:
+        # Extract the screenshot number from A file
+        a_num = int(a_file.name.split('_')[1])
+        
+        # Find corresponding B file
+        b_file = None
+        for bf in b_files:
+            if bf.name.startswith(f"screenshot_{a_num:03d}_B_"):
+                b_file = bf
+                break
+        
+        if b_file and b_file.exists():
+            try:
+                # Load both images
+                img_a = cv2.imread(str(a_file))
+                img_b = cv2.imread(str(b_file))
+                
+                if img_a is not None and img_b is not None:
+                    # Get dimensions
+                    height_a, width_a = img_a.shape[:2]
+                    height_b, width_b = img_b.shape[:2]
+                    
+                    # Resize B to match A if needed
+                    if height_b != height_a or width_b != width_a:
+                        img_b = cv2.resize(img_b, (width_a, height_a))
+                    
+                    # Calculate 20% width
+                    left_width = int(width_a * 0.2)
+                    
+                    # Extract left 20% from B
+                    left_b = img_b[:, :left_width]
+                    
+                    # Replace left 20% of A with left 20% of B
+                    img_a[:, :left_width] = left_b
+                    
+                    # Save the merged image back to A file
+                    success = cv2.imwrite(str(a_file), img_a)
+                    
+                    if success:
+                        merged_count += 1
+                        with open(log_path, 'a', encoding='utf-8') as log_file:
+                            log_file.write(f"✓ Merged {b_file.name} into {a_file.name}\n")
+                    else:
+                        with open(log_path, 'a', encoding='utf-8') as log_file:
+                            log_file.write(f"✗ Failed to save merged image for {a_file.name}\n")
+                
+                # Delete the B file
+                b_file.unlink()
+                deleted_count += 1
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"✓ Deleted {b_file.name}\n")
+                    
+            except Exception as e:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"✗ Error processing {a_file.name} and {b_file.name}: {e}\n")
+        else:
+            with open(log_path, 'a', encoding='utf-8') as log_file:
+                log_file.write(f"- No B screenshot found for {a_file.name}\n")
+    
+    with open(log_path, 'a', encoding='utf-8') as log_file:
+        log_file.write(f"--- MERGE COMPLETE ---\n")
+        log_file.write(f"Merged: {merged_count} screenshots\n")
+        log_file.write(f"Deleted: {deleted_count} B screenshots\n")
+    
+    print(f"Merged {merged_count} screenshots and deleted {deleted_count} B screenshots")
 
 def main():
     parser = argparse.ArgumentParser(description="Extract screenshots from video files at regular intervals or based on content changes")
