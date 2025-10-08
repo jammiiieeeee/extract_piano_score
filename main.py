@@ -1,4 +1,5 @@
 import cv2
+import numpy as np
 import os
 import argparse
 import sys
@@ -108,9 +109,11 @@ def extract_screenshots(video_path, start_time=2, interval=12, detection_method=
     # Create organized folder structure:
     # [video_name]/
     #   ├── screenshots/
+    #   ├── debug_masks/
     #   └── [video_name]_score.pdf
     main_folder = os.path.join(os.getcwd(), sanitized_name)
     screenshots_dir = os.path.join(main_folder, "screenshots")
+    debug_masks_dir = os.path.join(main_folder, "debug_masks")
     
     # Delete existing folder if it exists
     if os.path.exists(main_folder):
@@ -122,8 +125,10 @@ def extract_screenshots(video_path, start_time=2, interval=12, detection_method=
     
     # Create new folder structure
     os.makedirs(screenshots_dir, exist_ok=True)
+    os.makedirs(debug_masks_dir, exist_ok=True)
     print(f"Created main folder: {main_folder}")
     print(f"Screenshots will be saved to: {screenshots_dir}")
+    print(f"Debug masks will be saved to: {debug_masks_dir}")
     
     # Open video capture
     cap = cv2.VideoCapture(video_path)
@@ -161,16 +166,16 @@ def extract_screenshots(video_path, start_time=2, interval=12, detection_method=
     
     if detection_method == 'time':
         print(f"Using time-based method: screenshots every {interval} seconds starting at {start_time}s")
-        success = _extract_time_based(cap, fps, duration, start_time, interval, screenshots_dir, screenshot_count, log_path, sanitized_name)
+        success = _extract_time_based(cap, fps, duration, start_time, interval, screenshots_dir, screenshot_count, log_path, sanitized_name, debug_masks_dir)
     else:
         print(f"Using change-based method: detecting {change_threshold*100}% change in top 20% of frame")
         print(f"Log file will be saved to: {log_path}")
-        success = _extract_change_based(cap, fps, duration, start_time, change_threshold, screenshots_dir, screenshot_count, log_path, sanitized_name)
+        success = _extract_change_based(cap, fps, duration, start_time, change_threshold, screenshots_dir, screenshot_count, log_path, sanitized_name, debug_masks_dir)
     
     cap.release()
     return success, screenshots_dir
 
-def _extract_time_based(cap, fps, duration, start_time, interval, screenshots_dir, screenshot_count, log_path, sanitized_name):
+def _extract_time_based(cap, fps, duration, start_time, interval, screenshots_dir, screenshot_count, log_path, sanitized_name, debug_masks_dir):
     """Extract screenshots at fixed time intervals"""
     import time
     
@@ -199,7 +204,7 @@ def _extract_time_based(cap, fps, duration, start_time, interval, screenshots_di
         if ret:
             with open(log_path, 'a', encoding='utf-8') as log_file:
                 log_file.write(f">>> SCREENSHOT CAPTURED at {current_time:.1f}s (time-based interval)\n")
-            success = _save_screenshot(frame, current_time, screenshot_count, screenshots_dir)
+            success = _save_screenshot_with_progress_bar_merge(cap, current_time, screenshot_count, screenshots_dir, log_path, debug_masks_dir)
             if success:
                 screenshot_count += 1
         else:
@@ -211,9 +216,9 @@ def _extract_time_based(cap, fps, duration, start_time, interval, screenshots_di
         # Move to next time interval
         current_time += interval
         
-        # Update progress indicator every 0.2 seconds
+        # Update progress indicator every 0.1 seconds
         current_real_time = time.time()
-        if current_real_time - last_progress_update >= 0.2:
+        if current_real_time - last_progress_update >= 0.1:
             progress_percent = (current_time / duration) * 100
             elapsed_time = current_real_time - process_start_time
             if progress_percent > 0:
@@ -235,12 +240,16 @@ def _extract_time_based(cap, fps, duration, start_time, interval, screenshots_di
         log_file.write(f"Analysis completed at {duration:.1f}s\n")
         log_file.write(f"Total screenshots captured: {screenshot_count}\n")
     
+    # Remove duplicate screenshots
+    remaining_count = remove_duplicate_screenshots(screenshots_dir, log_path)
+    
     print(f"\n\nCompleted! Extracted {screenshot_count} screenshots.")
+    print(f"After duplicate removal: {remaining_count} unique screenshots")
     print(f"Screenshots saved in: {screenshots_dir}")
     print(f"Log saved to: {log_path}")
     return True
 
-def _extract_change_based(cap, fps, duration, start_time, change_threshold, screenshots_dir, screenshot_count, log_path, sanitized_name):
+def _extract_change_based(cap, fps, duration, start_time, change_threshold, screenshots_dir, screenshot_count, log_path, sanitized_name, debug_masks_dir):
     """Extract screenshots based on content changes"""
     import time
     
@@ -251,10 +260,10 @@ def _extract_change_based(cap, fps, duration, start_time, change_threshold, scre
     frame_count = 0
     min_interval_frames = int(fps * 2)  # Minimum 2 seconds between screenshots
     frames_since_last_screenshot = 0
-    check_interval_frames = max(1, int(fps * 0.2))  # Check every 0.2 seconds
+    check_interval_frames = max(1, int(fps * 1.0))  # Check every 1.0 second
     
     print(f"Analyzing video for content changes (threshold: {change_threshold*100}%)...")
-    print(f"Checking frames every {0.2}s ({check_interval_frames} frames)")
+    print(f"Checking frames every {1.0}s ({check_interval_frames} frames)")
     
     # Initialize log file
     with open(log_path, 'w', encoding='utf-8') as log_file:
@@ -262,6 +271,7 @@ def _extract_change_based(cap, fps, duration, start_time, change_threshold, scre
         log_file.write(f"Video Duration: {duration:.2f} seconds\n")
         log_file.write(f"Change Threshold: {change_threshold*100}%\n")
         log_file.write(f"Start Time: {start_time}s\n")
+        log_file.write(f"Check Interval: 1.0s\n")
         log_file.write("=" * 50 + "\n\n")
     
     # Progress tracking
@@ -277,9 +287,9 @@ def _extract_change_based(cap, fps, duration, start_time, change_threshold, scre
         frames_since_last_screenshot += 1
         current_time = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
         
-        # Update progress indicator every 0.2 seconds (real time)
+        # Update progress indicator every 0.1 seconds (real time)
         current_real_time = time.time()
-        if current_real_time - last_progress_update >= 0.2:
+        if current_real_time - last_progress_update >= 0.1:
             progress_percent = (current_time / duration) * 100
             elapsed_time = current_real_time - process_start_time
             if progress_percent > 0:
@@ -295,7 +305,7 @@ def _extract_change_based(cap, fps, duration, start_time, change_threshold, scre
             print(f"\rProgress: [{bar}] {progress_percent:.1f}% ({current_time:.1f}s/{duration:.1f}s) - {screenshot_count} screenshots - ETA: {remaining_str}", end='', flush=True)
             last_progress_update = current_real_time
         
-        # Check for changes every 0.2 seconds
+        # Check for changes every 1.0 second
         if frame_count % check_interval_frames == 0:
             if previous_frame is not None:
                 change_percentage = _calculate_frame_change_percentage(previous_frame, frame, 0.2)
@@ -317,7 +327,7 @@ def _extract_change_based(cap, fps, duration, start_time, change_threshold, scre
                 if change_percentage >= (change_threshold * 100) and frames_since_last_screenshot >= min_interval_frames:
                     with open(log_path, 'a', encoding='utf-8') as log_file:
                         log_file.write(f"\n>>> SCREENSHOT CAPTURED at {current_time:.1f}s ({change_percentage:.1f}% >= {change_threshold*100}%)\n")
-                    success = _save_screenshot(frame, current_time, screenshot_count, screenshots_dir)
+                    success = _save_screenshot_with_progress_bar_merge(cap, current_time, screenshot_count, screenshots_dir, log_path, debug_masks_dir)
                     if success:
                         screenshot_count += 1
                         frames_since_last_screenshot = 0
@@ -325,12 +335,12 @@ def _extract_change_based(cap, fps, duration, start_time, change_threshold, scre
                 # Save first frame after start time
                 with open(log_path, 'a', encoding='utf-8') as log_file:
                     log_file.write(f"\n>>> INITIAL SCREENSHOT CAPTURED at {current_time:.1f}s\n")
-                success = _save_screenshot(frame, current_time, screenshot_count, screenshots_dir)
+                success = _save_screenshot_with_progress_bar_merge(cap, current_time, screenshot_count, screenshots_dir, log_path, debug_masks_dir)
                 if success:
                     screenshot_count += 1
                     frames_since_last_screenshot = 0
         
-        # Update previous frame every 0.2 seconds for comparison
+        # Update previous frame every 1.0 second for comparison
         if frame_count % check_interval_frames == 0:
             previous_frame = frame.copy()
     
@@ -343,10 +353,150 @@ def _extract_change_based(cap, fps, duration, start_time, change_threshold, scre
         log_file.write(f"Analysis completed at {duration:.1f}s\n")
         log_file.write(f"Total screenshots captured: {screenshot_count}\n")
     
+    # Remove duplicate screenshots
+    remaining_count = remove_duplicate_screenshots(screenshots_dir, log_path)
+    
     print(f"\nCompleted! Extracted {screenshot_count} screenshots using change detection.")
+    print(f"After duplicate removal: {remaining_count} unique screenshots")
     print(f"Screenshots saved in: {screenshots_dir}")
     print(f"Log saved to: {log_path}")
     return True
+
+def compare_screenshots_similarity(image1_path, image2_path, top_ratio=0.2, threshold=0.04):
+    """
+    Compare two screenshots to determine if they are duplicates.
+    
+    Args:
+        image1_path: Path to first image
+        image2_path: Path to second image
+        top_ratio: Ratio of top portion to compare (default: 0.2 = 20%)
+        threshold: Threshold for considering images different (default: 0.04 = 4%)
+    
+    Returns:
+        bool: True if images are similar (duplicates), False if different
+    """
+    try:
+        # Load images
+        img1 = cv2.imread(image1_path)
+        img2 = cv2.imread(image2_path)
+        
+        if img1 is None or img2 is None:
+            return False
+        
+        # Resize images to same dimensions if needed
+        if img1.shape != img2.shape:
+            height = min(img1.shape[0], img2.shape[0])
+            width = min(img1.shape[1], img2.shape[1])
+            img1 = cv2.resize(img1, (width, height))
+            img2 = cv2.resize(img2, (width, height))
+        
+        # Get top portion only
+        height, width = img1.shape[:2]
+        top_height = int(height * top_ratio)
+        
+        top1 = img1[0:top_height, 0:width]
+        top2 = img2[0:top_height, 0:width]
+        
+        # Convert to grayscale
+        gray1 = cv2.cvtColor(top1, cv2.COLOR_BGR2GRAY)
+        gray2 = cv2.cvtColor(top2, cv2.COLOR_BGR2GRAY)
+        
+        # Calculate absolute difference
+        diff = cv2.absdiff(gray1, gray2)
+        
+        # Threshold the difference
+        _, thresh = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
+        
+        # Calculate percentage of different pixels
+        total_pixels = top_height * width
+        different_pixels = cv2.countNonZero(thresh)
+        difference_percentage = (different_pixels / total_pixels)
+        
+        # Return True if images are similar (difference < threshold)
+        return difference_percentage < threshold
+        
+    except Exception as e:
+        print(f"Error comparing {image1_path} and {image2_path}: {e}")
+        return False
+
+def remove_duplicate_screenshots(screenshots_dir, log_path):
+    """
+    Remove duplicate screenshots, keeping the one taken earlier in time.
+    
+    Args:
+        screenshots_dir: Directory containing screenshots
+        log_path: Path to log file
+    
+    Returns:
+        int: Number of remaining screenshots after duplicate removal
+    """
+    import glob
+    import os
+    import re
+    
+    # Get all screenshot files
+    screenshot_files = []
+    for ext in ['*.jpg', '*.jpeg', '*.png']:
+        screenshot_files.extend(glob.glob(os.path.join(screenshots_dir, ext)))
+    
+    if len(screenshot_files) < 2:
+        with open(log_path, 'a', encoding='utf-8') as log_file:
+            log_file.write(f"\nDuplicate Detection: {len(screenshot_files)} screenshots found, no duplicates to check\n")
+        return len(screenshot_files)
+    
+    # Sort files by timestamp (extract from filename)
+    def extract_timestamp(filename):
+        # Extract timestamp from filename like "screenshot_001_05m23s.jpg"
+        basename = os.path.basename(filename)
+        match = re.search(r'(\d+)m(\d+)s', basename)
+        if match:
+            minutes = int(match.group(1))
+            seconds = int(match.group(2))
+            return minutes * 60 + seconds
+        return 0
+    
+    screenshot_files.sort(key=extract_timestamp)
+    
+    with open(log_path, 'a', encoding='utf-8') as log_file:
+        log_file.write(f"\nDuplicate Detection: Checking {len(screenshot_files)} screenshots for duplicates\n")
+        log_file.write("Comparing top 20% of images with 4% threshold\n")
+    
+    duplicates_removed = 0
+    removed_files = []
+    
+    # Compare each image with all others
+    for i in range(len(screenshot_files)):
+        if screenshot_files[i] in removed_files:
+            continue
+            
+        for j in range(i + 1, len(screenshot_files)):
+            if screenshot_files[j] in removed_files:
+                continue
+                
+            # Compare the two images
+            are_similar = compare_screenshots_similarity(screenshot_files[i], screenshot_files[j])
+            
+            if are_similar:
+                # Remove the later screenshot (higher index = later timestamp)
+                file_to_remove = screenshot_files[j]
+                try:
+                    os.remove(file_to_remove)
+                    removed_files.append(file_to_remove)
+                    duplicates_removed += 1
+                    
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f"Duplicate removed: {os.path.basename(file_to_remove)} (duplicate of {os.path.basename(screenshot_files[i])})\n")
+                        
+                except Exception as e:
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f"Error removing duplicate {file_to_remove}: {e}\n")
+    
+    remaining_count = len(screenshot_files) - duplicates_removed
+    
+    with open(log_path, 'a', encoding='utf-8') as log_file:
+        log_file.write(f"Duplicate removal completed: {duplicates_removed} duplicates removed, {remaining_count} unique screenshots remaining\n")
+    
+    return remaining_count
 
 def _calculate_frame_change_percentage(frame1, frame2, top_ratio=0.2):
     """
@@ -387,6 +537,364 @@ def _calculate_frame_change_percentage(frame1, frame2, top_ratio=0.2):
     change_percentage = (changed_pixels / total_pixels) * 100
     
     return change_percentage
+
+def detect_progress_bar(frame, top_ratio=0.32):
+    """
+    Detect vertical progress bar in the top portion of frame.
+    Progress bar is typically a thin vertical colored line that stands out from the music notation.
+    
+    Args:
+        frame: OpenCV frame (numpy array)
+        top_ratio: Ratio of top portion to analyze (default: 0.32 = 32%)
+    
+    Returns:
+        tuple: (x_start, x_end, detected) where x_start and x_end are the horizontal 
+               boundaries of the progress bar, and detected is True if found
+    """
+    if frame is None:
+        return None, None, False
+    
+    height, width = frame.shape[:2]
+    top_height = int(height * top_ratio)
+    top_region = frame[0:top_height, 0:width]
+    
+    # Convert to different color spaces for better analysis
+    hsv = cv2.cvtColor(top_region, cv2.COLOR_BGR2HSV)
+    gray = cv2.cvtColor(top_region, cv2.COLOR_BGR2GRAY)
+    
+    # Method 1: Look for vertical edges (thin lines)
+    # Apply vertical edge detection
+    sobel_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+    sobel_x = np.abs(sobel_x)
+    sobel_x = (sobel_x / sobel_x.max() * 255).astype(np.uint8)
+    
+    # Threshold to find strong vertical edges
+    _, edge_mask = cv2.threshold(sobel_x, 100, 255, cv2.THRESH_BINARY)
+    
+    # Method 2: Look for distinct colors that stand out
+    # Create mask for pixels that are significantly different from background
+    # Analyze color variance in small vertical strips
+    progress_bar_candidates = []
+    
+    # Scan in vertical strips across the width
+    strip_width = 3  # Analyze 3-pixel wide strips
+    for x in range(0, width - strip_width, 2):  # Step by 2 pixels
+        strip = top_region[:, x:x+strip_width]
+        strip_hsv = hsv[:, x:x+strip_width]
+        strip_edges = edge_mask[:, x:x+strip_width]
+        
+        # Check if this strip has strong vertical edges
+        edge_density = np.sum(strip_edges > 0) / (top_height * strip_width)
+        
+        # Check color uniformity in the strip (progress bars are usually uniform color)
+        if strip.size > 0:
+            # Calculate color variance
+            mean_color = np.mean(strip, axis=(0, 1))
+            color_variance = np.var(strip.reshape(-1, 3), axis=0)
+            total_variance = np.sum(color_variance)
+            
+            # Check if the strip has uniform color and strong edges
+            if edge_density > 0.3 and total_variance < 1000:  # Uniform color, strong edges
+                # Check if it's not pure black or white
+                if not (np.all(mean_color < 10) or np.all(mean_color > 300)):
+                    # Calculate height of continuous colored region
+                    strip_gray = cv2.cvtColor(strip, cv2.COLOR_BGR2GRAY)
+                    
+                    # Find the longest continuous vertical line
+                    max_continuous_height = 0
+                    current_height = 0
+                    
+                    for y in range(top_height):
+                        if np.any(strip_edges[y, :] > 0):  # Has edge
+                            current_height += 1
+                        else:
+                            max_continuous_height = max(max_continuous_height, current_height)
+                            current_height = 0
+                    max_continuous_height = max(max_continuous_height, current_height)
+                    
+                    # If we found a significant vertical line
+                    if max_continuous_height > top_height * 0.3:  # At least 30% of region height
+                        progress_bar_candidates.append({
+                            'x_start': x,
+                            'x_end': x + strip_width,
+                            'width': strip_width,
+                            'height': max_continuous_height,
+                            'edge_density': edge_density,
+                            'color_variance': total_variance,
+                            'mean_color': mean_color,
+                            'score': edge_density * max_continuous_height / total_variance if total_variance > 0 else 0
+                        })
+    
+    # Method 3: Look for thin vertical contours with distinct colors
+    # Create a more sophisticated color mask
+    lab = cv2.cvtColor(top_region, cv2.COLOR_BGR2LAB)
+    
+    # Find regions that are colorimetrically distinct
+    # Calculate local color contrast
+    contrast_mask = np.zeros(gray.shape, dtype=np.uint8)
+    
+    kernel_size = 5
+    for y in range(kernel_size, top_height - kernel_size):
+        for x in range(kernel_size, width - kernel_size):
+            # Get local neighborhood
+            neighborhood = lab[y-kernel_size:y+kernel_size+1, x-kernel_size:x+kernel_size+1]
+            center_pixel = lab[y, x]
+            
+            # Calculate color distance from center to neighbors
+            distances = np.sqrt(np.sum((neighborhood - center_pixel) ** 2, axis=2))
+            max_distance = np.max(distances)
+            
+            # If this pixel is very different from its surroundings
+            if max_distance > 30:  # Threshold for color distinctness
+                contrast_mask[y, x] = 255
+    
+    # Find contours in contrast mask
+    contours, _ = cv2.findContours(contrast_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        
+        # Look for thin vertical shapes
+        if (h > w * 2 and  # Height > 2x width (more vertical)
+            w >= 1 and w <= 20 and  # Very thin (1-20 pixels wide)
+            h >= top_height * 0.2):  # Significant height
+            
+            area_ratio = cv2.contourArea(contour) / (w * h) if w * h > 0 else 0
+            if area_ratio > 0.3:  # Reasonably filled
+                progress_bar_candidates.append({
+                    'x_start': x,
+                    'x_end': x + w,
+                    'width': w,
+                    'height': h,
+                    'edge_density': 1.0,  # From contour detection
+                    'color_variance': 0,   # Assume uniform
+                    'mean_color': np.mean(top_region[y:y+h, x:x+w], axis=(0,1)),
+                    'score': h * (1 / w) * area_ratio  # Prefer tall, thin, filled shapes
+                })
+    
+    # Select the best candidate
+    if progress_bar_candidates:
+        # Sort by score (higher is better)
+        progress_bar_candidates.sort(key=lambda x: x['score'], reverse=True)
+        
+        best_candidate = progress_bar_candidates[0]
+        return best_candidate['x_start'], best_candidate['x_end'], True
+    
+    return None, None, False
+
+def detect_progress_bar_with_debug(frame, current_time, screenshot_count, debug_masks_dir):
+    """
+    Detect vertical progress bar and save debug visualization images.
+    
+    Args:
+        frame: OpenCV frame (numpy array)
+        current_time: Current timestamp
+        screenshot_count: Current screenshot number
+        debug_masks_dir: Directory to save debug images
+    
+    Returns:
+        tuple: (x_start, x_end, detected) same as detect_progress_bar
+    """
+    if frame is None:
+        return None, None, False
+    
+    top_ratio = 0.32
+    height, width = frame.shape[:2]
+    top_height = int(height * top_ratio)
+    top_region = frame[0:top_height, 0:width]
+    
+    # Convert to HSV for better color detection
+    hsv = cv2.cvtColor(top_region, cv2.COLOR_BGR2HSV)
+    
+    # Create mask for non-black and non-white pixels
+    black_threshold = 190
+    white_value_threshold = 250 
+    white_saturation_threshold = 40  
+    
+    # Create masks
+    not_black_mask = hsv[:, :, 2] > black_threshold
+    not_white_mask = ~((hsv[:, :, 2] > white_value_threshold) & (hsv[:, :, 1] < white_saturation_threshold))
+    colored_mask = not_black_mask & not_white_mask
+    colored_mask = colored_mask.astype(np.uint8) * 255
+    
+    # Apply morphological operations
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    colored_mask_cleaned = cv2.morphologyEx(colored_mask, cv2.MORPH_CLOSE, kernel)
+    colored_mask_cleaned = cv2.morphologyEx(colored_mask_cleaned, cv2.MORPH_OPEN, kernel)
+    
+    # Find contours
+    contours, _ = cv2.findContours(colored_mask_cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Create debug visualization
+    debug_image = top_region.copy()
+    mask_overlay = cv2.cvtColor(colored_mask_cleaned, cv2.COLOR_GRAY2BGR)
+    
+    # Look for progress bar candidates
+    progress_bar_candidates = []
+    
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        
+        if (h > w * 1.5 and w >= 8 and w <= 60 and h >= 30 and y < top_height * 0.9):
+            contour_area = cv2.contourArea(contour)
+            bbox_area = w * h
+            area_ratio = contour_area / bbox_area if bbox_area > 0 else 0
+            
+            if area_ratio > 0.3:
+                roi_mask = colored_mask_cleaned[y:y+h, x:x+w]
+                colored_pixels = np.sum(roi_mask > 0)
+                total_pixels = w * h
+                color_density = colored_pixels / total_pixels
+                
+                if color_density > 0.5:
+                    progress_bar_candidates.append((x, x + w, w, h, area_ratio, color_density))
+                    # Draw candidate rectangles in blue
+                    cv2.rectangle(debug_image, (x, y), (x + w, y + h), (255, 0, 0), 2)
+                    cv2.putText(debug_image, f"{color_density:.2f}", (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+    
+    # Determine best candidate
+    detected = False
+    x_start, x_end = None, None
+    
+    if progress_bar_candidates:
+        progress_bar_candidates.sort(key=lambda x: (-x[5], -x[2] * x[3]))
+        best_candidate = progress_bar_candidates[0]
+        x_start, x_end = best_candidate[0], best_candidate[1]
+        detected = True
+        
+        # Draw final selection in green
+        y_pos = 0  # We don't store y in the return, but we can approximate
+        for candidate in progress_bar_candidates:
+            if candidate[0] == x_start and candidate[1] == x_end:
+                # Find the contour that matches this candidate
+                for contour in contours:
+                    x, y, w, h = cv2.boundingRect(contour)
+                    if x == x_start and x + w == x_end:
+                        cv2.rectangle(debug_image, (x, y), (x + w, y + h), (0, 255, 0), 3)
+                        cv2.putText(debug_image, "SELECTED", (x, y-15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                        break
+                break
+    
+    # Save debug images
+    timestamp_str = f"{int(current_time//60):02d}m{int(current_time%60):02d}s"
+    
+    # Save original top region
+    original_filename = f"debug_{screenshot_count+1:03d}_{timestamp_str}_original.jpg"
+    original_path = os.path.join(debug_masks_dir, original_filename)
+    cv2.imwrite(original_path, top_region)
+    
+    # Save color mask
+    mask_filename = f"debug_{screenshot_count+1:03d}_{timestamp_str}_mask.jpg"
+    mask_path = os.path.join(debug_masks_dir, mask_filename)
+    cv2.imwrite(mask_path, mask_overlay)
+    
+    # Save detection result
+    result_filename = f"debug_{screenshot_count+1:03d}_{timestamp_str}_result.jpg"
+    result_path = os.path.join(debug_masks_dir, result_filename)
+    cv2.imwrite(result_path, debug_image)
+    
+    return x_start, x_end, detected
+
+def merge_progress_bar_strip(frame_a, frame_b, progress_bar_x_start, progress_bar_x_end, strip_width_factor=1.5):
+    """
+    Extract progress bar strip from frame_b and merge it into frame_a.
+    
+    Args:
+        frame_a: Base frame (numpy array)
+        frame_b: Frame with updated progress bar (numpy array)
+        progress_bar_x_start: X coordinate of progress bar start
+        progress_bar_x_end: X coordinate of progress bar end
+        strip_width_factor: Factor to make strip wider than progress bar
+    
+    Returns:
+        numpy array: Merged frame
+    """
+    if frame_a is None or frame_b is None:
+        return frame_a
+    
+    if progress_bar_x_start is None or progress_bar_x_end is None:
+        return frame_a
+    
+    # Calculate strip boundaries (make it wider than the progress bar)
+    progress_bar_width = progress_bar_x_end - progress_bar_x_start
+    extra_width = int(progress_bar_width * (strip_width_factor - 1) / 2)
+    
+    strip_x_start = max(0, progress_bar_x_start - extra_width)
+    strip_x_end = min(frame_a.shape[1], progress_bar_x_end + extra_width)
+    
+    # Get the top 32% of both frames
+    height = frame_a.shape[0]
+    top_height = int(height * 0.32)
+    
+    # Create a copy of frame_a
+    merged_frame = frame_a.copy()
+    
+    # Extract the strip from frame_b and overlay it on frame_a
+    strip_from_b = frame_b[0:top_height, strip_x_start:strip_x_end]
+    merged_frame[0:top_height, strip_x_start:strip_x_end] = strip_from_b
+    
+    return merged_frame
+
+def _save_screenshot_with_progress_bar_merge(cap, current_time, screenshot_count, screenshots_dir, log_path, debug_masks_dir):
+    """
+    Capture screenshot A, wait 1 second, capture screenshot B, detect progress bar,
+    merge progress bar from B into A, and save the result.
+    
+    Args:
+        cap: Video capture object
+        current_time: Current timestamp
+        screenshot_count: Current screenshot number
+        screenshots_dir: Directory to save screenshots
+        log_path: Path to log file
+        debug_masks_dir: Directory to save debug mask images
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    import time
+    
+    # Get frame A at current time
+    frame_number_a = int(current_time * cap.get(cv2.CAP_PROP_FPS))
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_a)
+    ret_a, frame_a = cap.read()
+    
+    if not ret_a or frame_a is None:
+        with open(log_path, 'a', encoding='utf-8') as log_file:
+            log_file.write(f"Error: Could not capture frame A at {current_time:.1f}s\n")
+        return False
+    
+    # Detect progress bar in frame A and save debug images
+    progress_x_start, progress_x_end, progress_detected = detect_progress_bar_with_debug(frame_a, current_time, screenshot_count, debug_masks_dir)
+    
+    with open(log_path, 'a', encoding='utf-8') as log_file:
+        if progress_detected and progress_x_start is not None and progress_x_end is not None:
+            log_file.write(f"Progress bar detected at {current_time:.1f}s: x={progress_x_start}-{progress_x_end} (width={progress_x_end-progress_x_start}px)\n")
+        else:
+            log_file.write(f"No progress bar detected at {current_time:.1f}s\n")
+    
+    # If progress bar detected, wait 1 second and capture frame B
+    final_frame = frame_a
+    if progress_detected:
+        # Wait 1 second
+        time.sleep(1)
+        
+        # Calculate frame B position (1 second later)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        frame_number_b = int((current_time + 1) * fps)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_b)
+        ret_b, frame_b = cap.read()
+        
+        if ret_b and frame_b is not None:
+            # Merge progress bar strip from frame B into frame A
+            final_frame = merge_progress_bar_strip(frame_a, frame_b, progress_x_start, progress_x_end)
+            with open(log_path, 'a', encoding='utf-8') as log_file:
+                log_file.write(f"Progress bar merged from frame at {current_time + 1:.1f}s\n")
+        else:
+            with open(log_path, 'a', encoding='utf-8') as log_file:
+                log_file.write(f"Warning: Could not capture frame B for progress bar merge\n")
+    
+    # Save the final frame
+    return _save_screenshot(final_frame, current_time, screenshot_count, screenshots_dir)
 
 def _save_screenshot(frame, current_time, screenshot_count, screenshots_dir):
     """Save a screenshot with robust error handling"""

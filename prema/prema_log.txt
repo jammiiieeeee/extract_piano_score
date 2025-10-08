@@ -1,0 +1,264 @@
+Video Analysis Log - prema
+Video Duration: 269.07 seconds
+Change Threshold: 4.0%
+Start Time: 2s
+Check Interval: 1.0s
+==================================================
+
+
+>>> INITIAL SCREENSHOT CAPTURED at 3.0s
+No progress bar detected at 3.0s
+Time 4.0s: 0.4% different
+Time 5.0s: 0.4% different
+Time 6.0s: 0.6% different
+Time 7.0s: 0.4% different
+Time 8.0s: 0.4% different
+Time 9.0s: 0.4% different
+Time 10.0s: 0.4% different
+Time 11.0s: 0.4% different
+Time 12.0s: 0.4% different
+Time 13.0s: 0.4% different
+Time 14.0s: 0.4% different
+Time 15.0s: 0.4% different
+Time 16.0s: 0.5% different
+Time 17.0s: 22.4% different
+
+>>> SCREENSHOT CAPTURED at 17.0s (22.4% >= 4.0%)
+Progress bar detected at 17.0s: x=471-491 (width=20px)
+Progress bar merged from frame at 18.0s
+Time 19.0s: 0.3% different
+Time 20.0s: 0.3% different
+Time 21.0s: 0.3% different
+Time 22.0s: 0.3% different
+Time 23.0s: 0.3% different
+Time 24.0s: 0.3% different
+Time 25.0s: 0.3% different
+Time 26.0s: 0.3% different
+Time 27.0s: 0.3% different
+Time 28.0s: 0.3% different
+Time 29.0s: 0.3% different
+Time 30.0s: 0.3% different
+Time 31.0s: 12.3% different
+
+>>> SCREENSHOT CAPTURED at 31.0s (12.3% >= 4.0%)
+Progress bar detected at 31.0s: x=408-424 (width=16px)
+Progress bar merged from frame at 32.0s
+Time 33.0s: 0.3% different
+Time 34.0s: 0.3% different
+Time 35.0s: 0.3% different
+Time 36.0s: 0.3% different
+Time 37.0s: 0.3% different
+Time 38.0s: 0.3% different
+Time 39.0s: 0.3% different
+Time 40.0s: 0.3% different
+Time 41.0s: 0.3% different
+Time 42.0s: 0.3% different
+Time 43.0s: 0.3% different
+Time 44.0s: 0.3% different
+Time 45.0s: 12.4% different
+
+>>> SCREENSHOT CAPTURED at 45.0s (12.4% >= 4.0%)
+Progress bar detected at 45.0s: x=344-364 (width=20px)
+Progress bar merged from frame at 46.0s
+Time 47.0s: 0.3% different
+Time 48.0s: 0.3% different
+Time 49.0s: 0.3% different
+Time 50.0s: 0.3% different
+Time 51.0s: 0.3% different
+Time 52.0s: 0.3% different
+Time 53.0s: 0.3% different
+Time 54.0s: 0.3% different
+Time 55.0s: 0.3% different
+Time 56.0s: 0.3% different
+Time 57.0s: 11.4% different
+
+>>> SCREENSHOT CAPTURED at 57.0s (11.4% >= 4.0%)
+Progress bar detected at 57.0s: x=351-368 (width=17px)
+Progress bar merged from frame at 58.0s
+Time 59.0s: 0.3% different
+Time 60.0s: 0.3% different
+Time 61.0s: 0.3% different
+Time 62.0s: 0.3% different
+Time 63.0s: 0.3% different
+Time 64.0s: 0.3% different
+Time 65.0s: 0.3% different
+Time 66.0s: 0.3% different
+Time 67.0s: 0.3% different
+Time 68.0s: 0.3% different
+Time 69.0s: 11.8% different
+
+>>> SCREENSHOT CAPTURED at 69.0s (11.8% >= 4.0%)
+Progress bar detected at 69.0s: x=421-443 (width=22px)
+Progress bar merged from frame at 70.0s
+Time 71.0s: 0.3% different
+Time 72.0s: 0.3% different
+Time 73.0s: 0.3% different
+Time 74.0s: 0.3% different
+Time 75.0s: 0.3% different
+Time 76.0s: 0.3% different
+Time 77.0s: 0.3% different
+Time 78.0s: 0.3% different
+Time 79.0s: 0.3% different
+Time 80.0s: 0.3% different
+Time 81.0s: 11.0% different
+
+>>> SCREENSHOT CAPTURED at 81.0s (11.0% >= 4.0%)
+Progress bar detected at 81.0s: x=444-461 (width=17px)
+Progress bar merged from frame at 82.0s
+Time 83.0s: 0.3% different
+Time 84.0s: 0.3% different
+Time 85.0s: 0.3% different
+Time 86.0s: 0.3% different
+Time 87.0s: 0.3% different
+Time 88.0s: 0.3% different
+Time 89.0s: 0.3% different
+Time 90.0s: 0.3% different
+Time 91.0s: 0.3% different
+Time 92.0s: 0.3% different
+Time 93.0s: 10.8% different
+
+>>> SCREENSHOT CAPTURED at 93.0s (10.8% >= 4.0%)
+Progress bar detected at 93.0s: x=516-535 (width=19px)
+Progress bar merged from frame at 94.0s
+Time 95.0s: 0.3% different
+Time 96.0s: 0.3% different
+Time 97.0s: 0.3% different
+Time 98.0s: 0.3% different
+Time 99.0s: 0.3% different
+Time 100.0s: 0.3% different
+Time 101.0s: 0.3% different
+Time 102.0s: 0.3% different
+Time 103.0s: 0.3% different
+Time 104.0s: 0.3% different
+Time 105.0s: 12.1% different
+
+>>> SCREENSHOT CAPTURED at 105.0s (12.1% >= 4.0%)
+Progress bar detected at 105.0s: x=493-509 (width=16px)
+Progress bar merged from frame at 106.0s
+Time 107.0s: 0.3% different
+Time 108.0s: 0.3% different
+Time 109.0s: 0.3% different
+Time 110.0s: 0.3% different
+Time 111.0s: 0.3% different
+Time 112.0s: 0.3% different
+Time 113.0s: 0.3% different
+Time 114.0s: 0.3% different
+Time 115.0s: 0.3% different
+Time 116.0s: 0.3% different
+Time 117.0s: 0.3% different
+Time 118.0s: 0.3% different
+Time 119.0s: 11.9% different
+
+>>> SCREENSHOT CAPTURED at 119.0s (11.9% >= 4.0%)
+Progress bar detected at 119.0s: x=411-428 (width=17px)
+Progress bar merged from frame at 120.0s
+Time 121.0s: 0.3% different
+Time 122.0s: 0.3% different
+Time 123.0s: 0.3% different
+Time 124.0s: 0.3% different
+Time 125.0s: 0.3% different
+Time 126.0s: 0.3% different
+Time 127.0s: 0.3% different
+Time 128.0s: 0.3% different
+Time 129.0s: 0.3% different
+Time 130.0s: 0.3% different
+Time 131.0s: 0.3% different
+Time 132.0s: 0.3% different
+Time 133.0s: 11.6% different
+
+>>> SCREENSHOT CAPTURED at 133.0s (11.6% >= 4.0%)
+Progress bar detected at 133.0s: x=354-366 (width=12px)
+Progress bar merged from frame at 134.0s
+Time 135.0s: 0.3% different
+Time 136.0s: 13.6% different
+
+>>> SCREENSHOT CAPTURED at 136.0s (13.6% >= 4.0%)
+Progress bar detected at 136.0s: x=2617-2635 (width=18px)
+Progress bar merged from frame at 137.0s
+Time 138.0s: 0.3% different
+Time 139.0s: 0.3% different
+Time 140.0s: 13.2% different
+
+>>> SCREENSHOT CAPTURED at 140.0s (13.2% >= 4.0%)
+No progress bar detected at 140.0s
+Time 141.0s: 0.3% different
+Time 142.0s: 0.3% different
+Time 143.0s: 0.3% different
+Time 144.0s: 0.3% different
+Time 145.0s: 0.3% different
+Time 146.0s: 0.3% different
+Time 147.0s: 0.3% different
+Time 148.0s: 0.3% different
+Time 149.0s: 0.3% different
+Time 150.0s: 0.3% different
+Time 151.0s: 0.3% different
+Time 152.0s: 11.4% different
+
+>>> SCREENSHOT CAPTURED at 152.0s (11.4% >= 4.0%)
+Progress bar detected at 152.0s: x=348-364 (width=16px)
+Progress bar merged from frame at 153.0s
+Time 154.0s: 0.3% different
+Time 155.0s: 11.9% different
+
+>>> SCREENSHOT CAPTURED at 155.0s (11.9% >= 4.0%)
+Progress bar detected at 155.0s: x=1292-1310 (width=18px)
+Progress bar merged from frame at 156.0s
+Time 157.0s: 0.3% different
+Time 158.0s: 0.3% different
+Time 159.0s: 0.3% different
+Time 160.0s: 0.3% different
+Time 161.0s: 0.3% different
+Time 162.0s: 0.3% different
+Time 163.0s: 0.3% different
+Time 164.0s: 11.6% different
+
+>>> SCREENSHOT CAPTURED at 164.0s (11.6% >= 4.0%)
+Progress bar detected at 164.0s: x=438-454 (width=16px)
+Progress bar merged from frame at 165.0s
+Time 166.0s: 0.3% different
+Time 167.0s: 0.3% different
+Time 168.0s: 0.3% different
+Time 169.0s: 0.3% different
+Time 170.0s: 0.3% different
+Time 171.0s: 0.3% different
+Time 172.0s: 0.3% different
+Time 173.0s: 0.3% different
+Time 174.0s: 0.3% different
+Time 175.0s: 0.3% different
+Time 176.0s: 10.9% different
+
+>>> SCREENSHOT CAPTURED at 176.0s (10.9% >= 4.0%)
+Progress bar detected at 176.0s: x=401-418 (width=17px)
+Progress bar merged from frame at 177.0s
+Time 178.0s: 0.3% different
+Time 179.0s: 0.3% different
+Time 180.0s: 0.3% different
+Time 181.0s: 0.3% different
+Time 182.0s: 0.3% different
+Time 183.0s: 0.3% different
+Time 184.0s: 0.3% different
+Time 185.0s: 0.3% different
+Time 186.0s: 0.3% different
+Time 187.0s: 0.3% different
+Time 188.0s: 0.3% different
+Time 189.0s: 0.3% different
+Time 190.0s: 11.2% different
+
+>>> SCREENSHOT CAPTURED at 190.0s (11.2% >= 4.0%)
+Progress bar detected at 190.0s: x=346-364 (width=18px)
+Progress bar merged from frame at 191.0s
+Time 192.0s: 0.3% different
+Time 193.0s: 0.3% different
+Time 194.0s: 0.3% different
+Time 195.0s: 0.3% different
+Time 196.0s: 0.3% different
+Time 197.0s: 0.3% different
+Time 198.0s: 0.3% different
+Time 199.0s: 0.3% different
+Time 200.0s: 0.3% different
+Time 201.0s: 0.3% different
+Time 202.0s: 11.9% different
+
+>>> SCREENSHOT CAPTURED at 202.0s (11.9% >= 4.0%)
+Progress bar detected at 202.0s: x=418-435 (width=17px)
+Progress bar merged from frame at 203.0s
