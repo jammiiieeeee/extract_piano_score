@@ -447,7 +447,7 @@ def main():
     parser.add_argument("video_path", help="Path to the video file")
     parser.add_argument("--start", type=float, default=2, help="Starting time in seconds (default: 2)")
     parser.add_argument("--interval", type=float, default=12, help="Interval between screenshots in seconds for time-based method (default: 12)")
-    parser.add_argument("--method", choices=['time', 'change'], default='time', help="Screenshot method: 'time' for fixed intervals, 'change' for content change detection (default: time)")
+    parser.add_argument("--method", choices=['time', 'change'], default='change', help="Screenshot method: 'time' for fixed intervals, 'change' for content change detection (default: change)")
     parser.add_argument("--change-threshold", type=float, default=0.04, help="Threshold for change detection method (0.0-1.0, default: 0.04 = 4%)")
     parser.add_argument("--test", action="store_true", help="Test mode: only check video properties without extracting screenshots")
     parser.add_argument("--create-pdf", action="store_true", help="Create PDF after extracting screenshots")
