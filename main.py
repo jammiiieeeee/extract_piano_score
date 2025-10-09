@@ -177,7 +177,7 @@ def detect_frame_change(frame1, frame2, top_ratio=0.2, threshold=0.04):
     
     return change_percentage >= threshold
 
-def extract_screenshots(video_path, start_time=2, interval=12, detection_method='time', change_threshold=0.04, original_filename=None):
+def extract_screenshots(video_path, start_time=2, interval=12, detection_method='time', change_threshold=0.04, original_filename=None, skip_duplicates=False):
     """
     Extract screenshots from a video at regular intervals or based on content changes.
     
@@ -260,19 +260,19 @@ def extract_screenshots(video_path, start_time=2, interval=12, detection_method=
     
     if detection_method == 'time':
         print(f"Using time-based method: screenshots every {interval} seconds starting at {start_time}s")
-        success = _extract_time_based(cap, fps, duration, start_time, interval, screenshots_dir, screenshot_count, log_path, sanitized_name)
+        success = _extract_time_based(cap, fps, duration, start_time, interval, screenshots_dir, screenshot_count, log_path, sanitized_name, skip_duplicates)
         cap.release()
     else:
         print(f"Using change-based method: detecting {change_threshold*100}% change in top 20% of frame")
         print(f"Log file will be saved to: {log_path}")
-        success = _extract_change_based(cap, fps, duration, start_time, change_threshold, screenshots_dir, screenshot_count, log_path, sanitized_name)
+        success = _extract_change_based(cap, fps, duration, start_time, change_threshold, screenshots_dir, screenshot_count, log_path, sanitized_name, skip_duplicates)
         # cap.release() is now called inside _extract_change_based after B screenshots are captured
     
     # Keep temporary folder name if processing was successful - will be renamed after PDF creation
     # Only return the directory path for PDF creation to handle renaming
     return success, screenshots_dir, temp_main_folder, sanitized_name
 
-def _extract_time_based(cap, fps, duration, start_time, interval, screenshots_dir, screenshot_count, log_path, sanitized_name):
+def _extract_time_based(cap, fps, duration, start_time, interval, screenshots_dir, screenshot_count, log_path, sanitized_name, skip_duplicates=False):
     """Extract screenshots at fixed time intervals"""
     import time
     
@@ -337,17 +337,22 @@ def _extract_time_based(cap, fps, duration, start_time, interval, screenshots_di
         log_file.write(f"Analysis completed at {duration:.1f}s\n")
         log_file.write(f"Total screenshots captured: {screenshot_count}\n")
     
-    # Remove duplicate screenshots
-    removed_count = remove_duplicate_screenshots(screenshots_dir, top_ratio=0.2)
-    final_count = screenshot_count - removed_count
-    
-    print(f"\n\nCompleted! Extracted {screenshot_count} screenshots, removed {removed_count} duplicates.")
-    print(f"Final count: {final_count} unique screenshots.")
+    # Remove duplicate screenshots if not skipped
+    if not skip_duplicates:
+        removed_count = remove_duplicate_screenshots(screenshots_dir, top_ratio=0.2)
+        final_count = screenshot_count - removed_count
+        print(f"\n\nCompleted! Extracted {screenshot_count} screenshots, removed {removed_count} duplicates.")
+        print(f"Final count: {final_count} unique screenshots.")
+    else:
+        removed_count = 0
+        final_count = screenshot_count
+        print(f"\n\nCompleted! Extracted {screenshot_count} screenshots (duplicate detection skipped).")
+        print(f"Final count: {final_count} screenshots.")
     print(f"Screenshots saved in: {screenshots_dir}")
     print(f"Log saved to: {log_path}")
     return True
 
-def _extract_change_based(cap, fps, duration, start_time, change_threshold, screenshots_dir, screenshot_count, log_path, sanitized_name):
+def _extract_change_based(cap, fps, duration, start_time, change_threshold, screenshots_dir, screenshot_count, log_path, sanitized_name, skip_duplicates=False):
     """Extract screenshots based on content changes"""
     import time
     
@@ -489,12 +494,17 @@ def _extract_change_based(cap, fps, duration, start_time, change_threshold, scre
         log_file.write(f"Total B screenshots captured: {b_screenshot_count}\n")
         log_file.write(f"B screenshots merged and deleted\n")
     
-    # Remove duplicate screenshots
-    removed_count = remove_duplicate_screenshots(screenshots_dir, top_ratio=0.2)
-    final_count = screenshot_count - removed_count
-    
-    print(f"\nCompleted! Extracted {screenshot_count} screenshots using change detection, removed {removed_count} duplicates.")
-    print(f"Final count: {final_count} unique screenshots.")
+    # Remove duplicate screenshots if not skipped
+    if not skip_duplicates:
+        removed_count = remove_duplicate_screenshots(screenshots_dir, top_ratio=0.2)
+        final_count = screenshot_count - removed_count
+        print(f"\nCompleted! Extracted {screenshot_count} screenshots using change detection, removed {removed_count} duplicates.")
+        print(f"Final count: {final_count} unique screenshots.")
+    else:
+        removed_count = 0
+        final_count = screenshot_count
+        print(f"\nCompleted! Extracted {screenshot_count} screenshots using change detection (duplicate detection skipped).")
+        print(f"Final count: {final_count} screenshots.")
     print(f"Screenshots saved in: {screenshots_dir}")
     print(f"Log saved to: {log_path}")
     return True
@@ -861,6 +871,7 @@ def main():
     parser.add_argument("--create-pdf", action="store_true", help="Create PDF after extracting screenshots")
     parser.add_argument("--crop-ratio", type=float, default=0.32, help="Portion of height to keep from top for PDF (default: 0.32)")
     parser.add_argument("--strips-per-page", type=int, default=6, help="Maximum strips per A4 page (default: 6)")
+    parser.add_argument("--skip-duplicates", action="store_true", help="Skip duplicate detection and removal process")
     
     args = parser.parse_args()
     
@@ -974,7 +985,8 @@ def main():
         args.interval, 
         args.method, 
         args.change_threshold,
-        original_filename
+        original_filename,
+        args.skip_duplicates
     )
     
     if isinstance(result, tuple) and len(result) == 4:
