@@ -1051,11 +1051,14 @@ def main():
                     final_pdf_path = os.path.join(main_folder, final_pdf_filename)
                     
                     print(f"Creating PDF: {final_pdf_path}")
+                    # Use None for auto-calculation if user didn't specify strips_per_page
+                    strips_per_page = None if args.strips_per_page == 6 else args.strips_per_page  # 6 is the default
+                    
                     success = create_pdf_module.create_pdf_from_screenshots(
                         screenshots_dir, 
                         temp_pdf_path, 
                         args.crop_ratio, 
-                        args.strips_per_page,
+                        strips_per_page,
                         sanitized_name  # Pass song title
                     )
                     

@@ -87,7 +87,7 @@ def fit_image_to_a4(image, a4_width, a4_height, margin=50, title_space=0):
     resized_image = cv2.resize(image, (new_width, new_height))
     return resized_image
 
-def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots.pdf", crop_ratio=0.32, strips_per_page=6, song_title=None):
+def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots.pdf", crop_ratio=0.32, strips_per_page=None, song_title=None):
     """
     Create PDF with stacked screenshot strips.
     
@@ -95,7 +95,7 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
         screenshots_dir: Directory containing screenshots
         output_pdf: Output PDF filename
         crop_ratio: Portion of height to keep from top
-        strips_per_page: Maximum number of strips per A4 page
+        strips_per_page: Maximum number of strips per A4 page (None for auto-calculation)
         song_title: Title to display on first page
     """
     # Get all screenshot files
@@ -121,6 +121,53 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
     
     cropped_strips = []
     page_count = 0
+    calculated_strips_per_page = strips_per_page  # Will be set if auto-calculation is needed
+    
+    # Auto-calculate strips per page if not specified
+    if strips_per_page is None:
+        print("Auto-calculating optimal strips per page...")
+        # Load first image to get dimensions
+        first_image = cv2.imread(str(screenshot_files[0]))
+        if first_image is not None:
+            # Crop to get actual strip height
+            first_cropped = crop_top_portion(first_image, crop_ratio)
+            strip_height = first_cropped.shape[0]
+            strip_width = first_cropped.shape[1]
+            
+            # Calculate available space on A4 page
+            margin = 50  # pixels
+            title_space = 120 if song_title else 0  # pixels for title on first page
+            available_height = a4_height - 2 * margin - title_space
+            available_width = a4_width - 2 * margin
+            
+            # Calculate how many strips can fit vertically
+            # Account for some spacing between strips (assume 10px between each strip)
+            spacing_per_strip = 10
+            effective_strip_height = strip_height + spacing_per_strip
+            
+            # Calculate max strips that fit in height
+            max_strips_by_height = max(1, int(available_height / effective_strip_height))
+            
+            # Also consider width scaling - if strips are too wide, they'll be scaled down
+            width_scale = available_width / strip_width
+            if width_scale < 1.0:
+                # If strips need to be scaled down, recalculate with scaled height
+                scaled_strip_height = int(strip_height * width_scale)
+                effective_scaled_height = scaled_strip_height + spacing_per_strip
+                max_strips_by_height = max(1, int(available_height / effective_scaled_height))
+            
+            # Set reasonable bounds (minimum 1, maximum 15 for readability)
+            calculated_strips_per_page = min(15, max(1, max_strips_by_height))
+            
+            print(f"Original strip dimensions: {strip_width}x{strip_height}")
+            print(f"Available page space: {available_width}x{available_height}")
+            print(f"Calculated optimal strips per page: {calculated_strips_per_page}")
+        else:
+            print("Warning: Could not load first image for auto-calculation, using default of 6")
+            calculated_strips_per_page = 6
+    else:
+        calculated_strips_per_page = strips_per_page
+        print(f"Using user-specified strips per page: {calculated_strips_per_page}")
     
     print(f"Processing screenshots...")
     
@@ -138,7 +185,7 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
         cropped_strips.append(cropped)
         
         # When we have enough strips or reached the end, create a page
-        if len(cropped_strips) >= strips_per_page or i == len(screenshot_files) - 1:
+        if len(cropped_strips) >= calculated_strips_per_page or i == len(screenshot_files) - 1:
             # Stack all strips vertically
             stacked_image = stack_images_vertically(cropped_strips)
             
