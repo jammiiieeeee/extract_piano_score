@@ -438,7 +438,7 @@ def _calculate_frame_change_percentage(frame1, frame2, top_ratio=0.2):
     
     return change_percentage
 
-def remove_duplicate_screenshots(screenshots_dir, similarity_threshold=0.04, top_ratio=0.2):
+def remove_duplicate_screenshots(screenshots_dir, similarity_threshold=0.1, top_ratio=0.2):
     """
     Remove duplicate screenshots by comparing their similarity.
     Only compares the top portion of the images as specified by top_ratio.
