@@ -7,6 +7,7 @@ import tempfile
 import subprocess
 import shutil
 import uuid
+import numpy as np
 from pathlib import Path
 
 def download_youtube_video(url):
@@ -99,6 +100,106 @@ def create_temp_video_copy(source_path):
     except Exception as e:
         print(f"Error creating temporary copy: {e}")
         return None
+
+def auto_calculate_crop_ratio(screenshots_dir, min_drop_threshold=50, min_ratio_threshold=0.3):
+    """
+    Automatically calculate the optimal crop ratio by detecting sharp brightness transitions.
+    
+    Args:
+        screenshots_dir: Directory containing screenshots
+        min_drop_threshold: Minimum brightness drop to consider (default: 50)
+        min_ratio_threshold: Minimum ratio drop (new_brightness / old_brightness) to consider (default: 0.3)
+    
+    Returns:
+        float: Optimal crop ratio (0.0 to 1.0), or None if detection failed
+    """
+    screenshot_files = []
+    for ext in ['*.jpg', '*.jpeg', '*.png']:
+        screenshot_files.extend(Path(screenshots_dir).glob(ext))
+    
+    if not screenshot_files:
+        print(f"No screenshot files found in {screenshots_dir}")
+        return None
+    
+    # Sort files by name and take a sample for analysis
+    screenshot_files.sort()
+    
+    # Use up to 10 screenshots for analysis to get a good average
+    sample_files = screenshot_files[:min(10, len(screenshot_files))]
+    
+    crop_ratios = []
+    
+    print(f"Auto-detecting crop ratio from {len(sample_files)} screenshots...")
+    
+    for screenshot_file in sample_files:
+        crop_ratio = _detect_crop_ratio_single_image(screenshot_file, min_drop_threshold, min_ratio_threshold)
+        if crop_ratio is not None:
+            crop_ratios.append(crop_ratio)
+    
+    if not crop_ratios:
+        print("Failed to detect crop ratio from any screenshots")
+        return None
+    
+    # Use median as it's more robust to outliers
+    recommended_ratio = np.median(crop_ratios)
+    
+    print(f"Detected crop ratios: {[f'{r:.3f}' for r in crop_ratios]}")
+    print(f"Recommended crop ratio: {recommended_ratio:.3f}")
+    
+    return recommended_ratio
+
+def _detect_crop_ratio_single_image(image_path, min_drop_threshold, min_ratio_threshold):
+    """
+    Detect crop ratio for a single image by finding sharp brightness transitions.
+    
+    Args:
+        image_path: Path to the image file
+        min_drop_threshold: Minimum brightness drop to consider
+        min_ratio_threshold: Minimum ratio drop to consider
+    
+    Returns:
+        float: Crop ratio (0.0 to 1.0), or None if detection failed
+    """
+    # Load the image
+    image = cv2.imread(str(image_path))
+    if image is None:
+        return None
+    
+    height, width = image.shape[:2]
+    
+    # Convert to grayscale for brightness calculation
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    # Calculate mean brightness for each row
+    brightness_profile = np.mean(gray, axis=1)
+    
+    # Use a sliding window to find the sharpest transition
+    window_size = max(3, height // 100)  # Adaptive window size based on image height
+    max_drop = 0
+    best_transition_row = None
+    
+    for i in range(window_size, height - window_size):
+        # Calculate average brightness before and after this point
+        before_brightness = np.mean(brightness_profile[i-window_size:i])
+        after_brightness = np.mean(brightness_profile[i:i+window_size])
+        
+        # Calculate the drop
+        brightness_drop = before_brightness - after_brightness
+        brightness_ratio = after_brightness / before_brightness if before_brightness > 0 else 1.0
+        
+        # Check if this is a significant drop
+        if (brightness_drop > min_drop_threshold and 
+            brightness_ratio < min_ratio_threshold and 
+            brightness_drop > max_drop):
+            max_drop = brightness_drop
+            best_transition_row = i
+    
+    if best_transition_row is None:
+        return None
+    
+    # Calculate crop ratio
+    crop_ratio = best_transition_row / height
+    return crop_ratio
 
 def sanitize_filename(filename):
     """
@@ -869,7 +970,8 @@ def main():
     parser.add_argument("--change-threshold", type=float, default=0.04, help="Threshold for change detection method (0.0-1.0, default: 0.04 = 4%)")
     parser.add_argument("--test", action="store_true", help="Test mode: only check video properties without extracting screenshots")
     parser.add_argument("--create-pdf", action="store_true", help="Create PDF after extracting screenshots")
-    parser.add_argument("--crop-ratio", type=float, default=0.32, help="Portion of height to keep from top for PDF (default: 0.32)")
+    parser.add_argument("--crop-ratio", type=float, help="Portion of height to keep from top for PDF (default: auto-detect)")
+    parser.add_argument("--auto-crop", action="store_true", default=True, help="Automatically detect crop ratio (default: True)")
     parser.add_argument("--strips-per-page", type=int, default=6, help="Maximum strips per A4 page (default: 6)")
     parser.add_argument("--skip-duplicates", action="store_true", help="Skip duplicate detection and removal process")
     
@@ -1051,13 +1153,31 @@ def main():
                     final_pdf_path = os.path.join(main_folder, final_pdf_filename)
                     
                     print(f"Creating PDF: {final_pdf_path}")
+                    
+                    # Determine crop ratio - auto-detect if not specified
+                    crop_ratio = args.crop_ratio
+                    if crop_ratio is None and args.auto_crop:
+                        print("\n=== AUTO-DETECTING CROP RATIO ===")
+                        detected_ratio = auto_calculate_crop_ratio(screenshots_dir)
+                        if detected_ratio is not None:
+                            crop_ratio = detected_ratio
+                            print(f"Using auto-detected crop ratio: {crop_ratio:.3f}")
+                        else:
+                            crop_ratio = 0.32  # Fallback to default
+                            print(f"Auto-detection failed, using default crop ratio: {crop_ratio}")
+                    elif crop_ratio is None:
+                        crop_ratio = 0.32  # Default if auto-crop is disabled
+                        print(f"Using default crop ratio: {crop_ratio}")
+                    else:
+                        print(f"Using manual crop ratio: {crop_ratio}")
+                    
                     # Use None for auto-calculation if user didn't specify strips_per_page
                     strips_per_page = None if args.strips_per_page == 6 else args.strips_per_page  # 6 is the default
                     
                     success = create_pdf_module.create_pdf_from_screenshots(
                         screenshots_dir, 
                         temp_pdf_path, 
-                        args.crop_ratio, 
+                        crop_ratio, 
                         strips_per_page,
                         sanitized_name  # Pass song title
                     )
