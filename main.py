@@ -747,7 +747,7 @@ def _merge_b_to_a_screenshots(screenshots_dir, log_path):
 
 def main():
     parser = argparse.ArgumentParser(description="Extract screenshots from video files at regular intervals or based on content changes")
-    parser.add_argument("video_path", help="Path to the video file")
+    parser.add_argument("--file", dest="video_path", required=True, help="Path to the video file")
     parser.add_argument("--start", type=float, default=2, help="Starting time in seconds (default: 2)")
     parser.add_argument("--interval", type=float, default=12, help="Interval between screenshots in seconds for time-based method (default: 12)")
     parser.add_argument("--method", choices=['time', 'change'], default='change', help="Screenshot method: 'time' for fixed intervals, 'change' for content change detection (default: change)")
