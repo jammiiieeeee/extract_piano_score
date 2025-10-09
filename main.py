@@ -3,7 +3,71 @@ import os
 import argparse
 import sys
 import re
+import tempfile
+import subprocess
 from pathlib import Path
+
+def download_youtube_video(url):
+    """
+    Download a YouTube video using yt-dlp in highest quality.
+    
+    Args:
+        url (str): YouTube URL to download
+        
+    Returns:
+        str: Path to the downloaded video file, or None if failed
+    """
+    try:
+        # Create a temporary directory for the download
+        temp_dir = tempfile.mkdtemp(prefix="youtube_download_")
+        
+        # Configure yt-dlp to download best quality video
+        cmd = [
+            "yt-dlp",
+            "--format", "best[ext=mp4]/best",  # Prefer mp4, fallback to best available
+            "--output", os.path.join(temp_dir, "%(title)s.%(ext)s"),
+            "--no-playlist",  # Only download single video even if URL contains playlist
+            url
+        ]
+        
+        print(f"Downloading video from: {url}")
+        print("This may take a few minutes depending on video size...")
+        
+        # Run yt-dlp
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace'
+        )
+        
+        if result.returncode != 0:
+            print(f"Error downloading video: {result.stderr}")
+            return None
+        
+        # Find the downloaded file
+        downloaded_files = []
+        for file_path in Path(temp_dir).glob("*"):
+            if file_path.is_file() and file_path.suffix.lower() in ['.mp4', '.webm', '.mkv', '.avi']:
+                downloaded_files.append(file_path)
+        
+        if not downloaded_files:
+            print("Error: No video file found after download")
+            return None
+        
+        # Return the path to the downloaded file
+        video_path = str(downloaded_files[0])
+        print(f"✓ Video downloaded successfully: {video_path}")
+        return video_path
+        
+    except FileNotFoundError:
+        print("Error: yt-dlp is not installed or not found in PATH")
+        print("Please install yt-dlp: pip install yt-dlp")
+        return None
+    except Exception as e:
+        print(f"Error downloading video: {e}")
+        return None
 
 def sanitize_filename(filename):
     """
@@ -747,7 +811,11 @@ def _merge_b_to_a_screenshots(screenshots_dir, log_path):
 
 def main():
     parser = argparse.ArgumentParser(description="Extract screenshots from video files at regular intervals or based on content changes")
-    parser.add_argument("--file", dest="video_path", required=True, help="Path to the video file")
+    
+    # Create mutually exclusive group for file or URL input
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument("--file", dest="video_path", help="Path to the video file")
+    input_group.add_argument("--url", dest="video_url", help="YouTube URL to download and process")
     parser.add_argument("--start", type=float, default=2, help="Starting time in seconds (default: 2)")
     parser.add_argument("--interval", type=float, default=12, help="Interval between screenshots in seconds for time-based method (default: 12)")
     parser.add_argument("--method", choices=['time', 'change'], default='change', help="Screenshot method: 'time' for fixed intervals, 'change' for content change detection (default: change)")
@@ -759,27 +827,48 @@ def main():
     
     args = parser.parse_args()
     
-    # Check if file exists first
-    if not os.path.exists(args.video_path):
-        print(f"Error: File '{args.video_path}' does not exist.")
-        print("Please check the file path and try again.")
-        sys.exit(1)
+    # Handle URL download or file path
+    video_path = None
+    downloaded_file = None
+    
+    if args.video_url:
+        # Download video from URL
+        video_path = download_youtube_video(args.video_url)
+        if not video_path:
+            print("Failed to download video from URL.")
+            sys.exit(1)
+        downloaded_file = video_path  # Keep track for cleanup
+    else:
+        # Use provided file path
+        video_path = args.video_path
+        
+        # Check if file exists
+        if not os.path.exists(video_path):
+            print(f"Error: File '{video_path}' does not exist.")
+            print("Please check the file path and try again.")
+            sys.exit(1)
     
     # Check file size
-    file_size = os.path.getsize(args.video_path)
+    file_size = os.path.getsize(video_path)
     print(f"File size: {file_size:,} bytes ({file_size / (1024*1024):.2f} MB)")
     
     # Validate video file extension
-    if not args.video_path.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')):
+    if not video_path.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')):
         print("Warning: File doesn't appear to be a video file. Supported formats: .mp4, .avi, .mov, .mkv, .webm")
     
     if args.test:
         # Test mode: just check if we can open the video and read its properties
         print("=== TEST MODE ===")
         
-        cap = cv2.VideoCapture(args.video_path)
+        cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
-            print(f"Error: Could not open video file '{args.video_path}'")
+            print(f"Error: Could not open video file '{video_path}'")
+            # Cleanup downloaded file if exists
+            if downloaded_file and os.path.exists(downloaded_file):
+                try:
+                    os.remove(downloaded_file)
+                except:
+                    pass
             sys.exit(1)
         
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -802,11 +891,18 @@ def main():
             print(f"  ✗ Could not read first frame")
         
         cap.release()
+        # Cleanup downloaded file if exists
+        if downloaded_file and os.path.exists(downloaded_file):
+            try:
+                os.remove(downloaded_file)
+                print(f"✓ Cleaned up downloaded file: {downloaded_file}")
+            except:
+                pass
         return
     
     # Extract screenshots
     result = extract_screenshots(
-        args.video_path, 
+        video_path, 
         args.start, 
         args.interval, 
         args.method, 
@@ -818,17 +914,24 @@ def main():
     else:
         success = result
         # Fallback to old structure if needed
-        video_name = Path(args.video_path).stem
+        video_name = Path(video_path).stem
         sanitized_name = sanitize_filename(video_name)
         screenshots_dir = os.path.join(os.getcwd(), f"{sanitized_name}_screenshots")
     
     if not success:
+        # Cleanup downloaded file if exists
+        if downloaded_file and os.path.exists(downloaded_file):
+            try:
+                os.remove(downloaded_file)
+                print(f"✓ Cleaned up downloaded file: {downloaded_file}")
+            except:
+                pass
         sys.exit(1)
     
     # Create PDF if requested
     if args.create_pdf:
         print("\n=== CREATING PDF ===")
-        video_name = Path(args.video_path).stem
+        video_name = Path(video_path).stem
         sanitized_name = sanitize_filename(video_name)
         main_folder = os.path.join(os.getcwd(), sanitized_name)
         screenshots_dir = os.path.join(main_folder, "screenshots")
@@ -898,6 +1001,17 @@ def main():
                     print(f"✗ Both PDF creation methods failed: {e2}")
         else:
             print(f"✗ Screenshots directory not found: {screenshots_dir}")
+    
+    # Cleanup downloaded file if exists
+    if downloaded_file and os.path.exists(downloaded_file):
+        try:
+            # Also clean up the temporary directory
+            temp_dir = os.path.dirname(downloaded_file)
+            import shutil
+            shutil.rmtree(temp_dir)
+            print(f"✓ Cleaned up downloaded file and temporary directory")
+        except Exception as e:
+            print(f"Warning: Could not clean up temporary files: {e}")
 
 if __name__ == "__main__":
     main()
