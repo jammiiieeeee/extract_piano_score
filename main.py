@@ -5,6 +5,8 @@ import sys
 import re
 import tempfile
 import subprocess
+import shutil
+import uuid
 from pathlib import Path
 
 def download_youtube_video(url):
@@ -67,6 +69,35 @@ def download_youtube_video(url):
         return None
     except Exception as e:
         print(f"Error downloading video: {e}")
+        return None
+
+def create_temp_video_copy(source_path):
+    """
+    Create a temporary copy of the video file for processing.
+    
+    Args:
+        source_path (str): Path to the source video file
+        
+    Returns:
+        str: Path to the temporary copy, or None if failed
+    """
+    try:
+        # Get the file extension
+        file_ext = Path(source_path).suffix
+        
+        # Create a temporary file with the same extension
+        temp_fd, temp_path = tempfile.mkstemp(suffix=file_ext, prefix="temp_video_")
+        os.close(temp_fd)  # Close the file descriptor, we just need the path
+        
+        # Copy the source file to the temporary location
+        print(f"Creating temporary copy of video file...")
+        shutil.copy2(source_path, temp_path)
+        
+        print(f"✓ Temporary copy created: {temp_path}")
+        return temp_path
+        
+    except Exception as e:
+        print(f"Error creating temporary copy: {e}")
         return None
 
 def sanitize_filename(filename):
@@ -146,7 +177,7 @@ def detect_frame_change(frame1, frame2, top_ratio=0.2, threshold=0.04):
     
     return change_percentage >= threshold
 
-def extract_screenshots(video_path, start_time=2, interval=12, detection_method='time', change_threshold=0.04):
+def extract_screenshots(video_path, start_time=2, interval=12, detection_method='time', change_threshold=0.04, original_filename=None):
     """
     Extract screenshots from a video at regular intervals or based on content changes.
     
@@ -163,30 +194,34 @@ def extract_screenshots(video_path, start_time=2, interval=12, detection_method=
         return False
     
     # Get video filename without extension and sanitize it
-    video_name = Path(video_path).stem
+    # Use original filename if provided, otherwise fall back to video_path
+    if original_filename:
+        video_name = original_filename
+    else:
+        video_name = Path(video_path).stem
     sanitized_name = sanitize_filename(video_name)
     
     print(f"Original filename: {video_name}")
     print(f"Sanitized filename: {sanitized_name}")
     
-    # Create organized folder structure:
-    # [video_name]/
-    #   ├── screenshots/
-    #   └── [video_name]_score.pdf
-    main_folder = os.path.join(os.getcwd(), sanitized_name)
-    screenshots_dir = os.path.join(main_folder, "screenshots")
+    # Create temporary folder during processing, will rename to final name at end
+    import uuid
+    temp_folder_name = f"temp_processing_{uuid.uuid4().hex[:8]}"
+    temp_main_folder = os.path.join(os.getcwd(), temp_folder_name)
+    screenshots_dir = os.path.join(temp_main_folder, "screenshots")
     
-    # Delete existing folder if it exists
-    if os.path.exists(main_folder):
+    # Delete existing final folder if it exists (from previous runs)
+    final_folder = os.path.join(os.getcwd(), sanitized_name)
+    if os.path.exists(final_folder):
         import shutil
-        print(f"Existing folder found: {main_folder}")
+        print(f"Existing folder found: {final_folder}")
         print("Deleting existing folder and contents...")
-        shutil.rmtree(main_folder)
+        shutil.rmtree(final_folder)
         print("✓ Existing folder deleted")
     
-    # Create new folder structure
+    # Create new temporary folder structure
     os.makedirs(screenshots_dir, exist_ok=True)
-    print(f"Created main folder: {main_folder}")
+    print(f"Created temporary folder: {temp_main_folder}")
     print(f"Screenshots will be saved to: {screenshots_dir}")
     
     # Open video capture
@@ -221,7 +256,7 @@ def extract_screenshots(video_path, start_time=2, interval=12, detection_method=
     
     # Create log file
     log_filename = f"{sanitized_name}_log.txt"
-    log_path = os.path.join(main_folder, log_filename)
+    log_path = os.path.join(temp_main_folder, log_filename)
     
     if detection_method == 'time':
         print(f"Using time-based method: screenshots every {interval} seconds starting at {start_time}s")
@@ -233,7 +268,9 @@ def extract_screenshots(video_path, start_time=2, interval=12, detection_method=
         success = _extract_change_based(cap, fps, duration, start_time, change_threshold, screenshots_dir, screenshot_count, log_path, sanitized_name)
         # cap.release() is now called inside _extract_change_based after B screenshots are captured
     
-    return success, screenshots_dir
+    # Keep temporary folder name if processing was successful - will be renamed after PDF creation
+    # Only return the directory path for PDF creation to handle renaming
+    return success, screenshots_dir, temp_main_folder, sanitized_name
 
 def _extract_time_based(cap, fps, duration, start_time, interval, screenshots_dir, screenshot_count, log_path, sanitized_name):
     """Extract screenshots at fixed time intervals"""
@@ -828,25 +865,44 @@ def main():
     args = parser.parse_args()
     
     # Handle URL download or file path
-    video_path = None
+    source_video_path = None
     downloaded_file = None
+    temp_video_path = None
     
     if args.video_url:
         # Download video from URL
-        video_path = download_youtube_video(args.video_url)
-        if not video_path:
+        source_video_path = download_youtube_video(args.video_url)
+        if not source_video_path:
             print("Failed to download video from URL.")
             sys.exit(1)
-        downloaded_file = video_path  # Keep track for cleanup
+        downloaded_file = source_video_path  # Keep track for cleanup
     else:
         # Use provided file path
-        video_path = args.video_path
+        source_video_path = args.video_path
         
         # Check if file exists
-        if not os.path.exists(video_path):
-            print(f"Error: File '{video_path}' does not exist.")
+        if not os.path.exists(source_video_path):
+            print(f"Error: File '{source_video_path}' does not exist.")
             print("Please check the file path and try again.")
             sys.exit(1)
+    
+    # Always create a temporary copy for processing
+    temp_video_path = create_temp_video_copy(source_video_path)
+    if not temp_video_path:
+        print("Failed to create temporary copy of video file.")
+        # Cleanup downloaded file if exists
+        if downloaded_file and os.path.exists(downloaded_file):
+            try:
+                os.remove(downloaded_file)
+            except:
+                pass
+        sys.exit(1)
+    
+    # Use the temporary copy for all processing
+    video_path = temp_video_path
+    
+    # Keep track of original filename for screenshot naming
+    original_filename = Path(source_video_path).stem
     
     # Check file size
     file_size = os.path.getsize(video_path)
@@ -863,7 +919,12 @@ def main():
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             print(f"Error: Could not open video file '{video_path}'")
-            # Cleanup downloaded file if exists
+            # Cleanup temporary and downloaded files
+            if temp_video_path and os.path.exists(temp_video_path):
+                try:
+                    os.remove(temp_video_path)
+                except:
+                    pass
             if downloaded_file and os.path.exists(downloaded_file):
                 try:
                     os.remove(downloaded_file)
@@ -891,7 +952,13 @@ def main():
             print(f"  ✗ Could not read first frame")
         
         cap.release()
-        # Cleanup downloaded file if exists
+        # Cleanup temporary and downloaded files
+        if temp_video_path and os.path.exists(temp_video_path):
+            try:
+                os.remove(temp_video_path)
+                print(f"✓ Cleaned up temporary file: {temp_video_path}")
+            except:
+                pass
         if downloaded_file and os.path.exists(downloaded_file):
             try:
                 os.remove(downloaded_file)
@@ -906,20 +973,34 @@ def main():
         args.start, 
         args.interval, 
         args.method, 
-        args.change_threshold
+        args.change_threshold,
+        original_filename
     )
     
-    if isinstance(result, tuple):
+    if isinstance(result, tuple) and len(result) == 4:
+        success, screenshots_dir, temp_main_folder, sanitized_name = result
+    elif isinstance(result, tuple) and len(result) == 2:
         success, screenshots_dir = result
+        # Fallback for old return format
+        video_name = Path(video_path).stem
+        sanitized_name = sanitize_filename(video_name)
+        temp_main_folder = None
     else:
         success = result
         # Fallback to old structure if needed
         video_name = Path(video_path).stem
         sanitized_name = sanitize_filename(video_name)
         screenshots_dir = os.path.join(os.getcwd(), f"{sanitized_name}_screenshots")
+        temp_main_folder = None
     
     if not success:
-        # Cleanup downloaded file if exists
+        # Cleanup temporary and downloaded files
+        if temp_video_path and os.path.exists(temp_video_path):
+            try:
+                os.remove(temp_video_path)
+                print(f"✓ Cleaned up temporary file: {temp_video_path}")
+            except:
+                pass
         if downloaded_file and os.path.exists(downloaded_file):
             try:
                 os.remove(downloaded_file)
@@ -931,10 +1012,15 @@ def main():
     # Create PDF if requested
     if args.create_pdf:
         print("\n=== CREATING PDF ===")
-        video_name = Path(video_path).stem
-        sanitized_name = sanitize_filename(video_name)
-        main_folder = os.path.join(os.getcwd(), sanitized_name)
-        screenshots_dir = os.path.join(main_folder, "screenshots")
+        # Use temporary folder for PDF creation, will rename after success
+        if temp_main_folder and os.path.exists(temp_main_folder):
+            main_folder = temp_main_folder
+            screenshots_dir = os.path.join(main_folder, "screenshots")
+        else:
+            # Fallback to final folder if temp_main_folder not available
+            sanitized_name = sanitize_filename(original_filename)
+            main_folder = os.path.join(os.getcwd(), sanitized_name)
+            screenshots_dir = os.path.join(main_folder, "screenshots")
         
         if os.path.exists(screenshots_dir):
             # Import create_pdf function directly instead of subprocess
@@ -946,22 +1032,48 @@ def main():
                     create_pdf_module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(create_pdf_module)
                     
-                    pdf_filename = f"{sanitized_name}_score.pdf"
-                    pdf_path = os.path.join(main_folder, pdf_filename)
+                    # Create PDF with temporary name first
+                    temp_pdf_filename = f"temp_pdf_{uuid.uuid4().hex[:8]}.pdf"
+                    temp_pdf_path = os.path.join(main_folder, temp_pdf_filename)
+                    final_pdf_filename = f"{sanitized_name}_score.pdf"
+                    final_pdf_path = os.path.join(main_folder, final_pdf_filename)
                     
-                    print(f"Creating PDF: {pdf_path}")
+                    print(f"Creating PDF: {final_pdf_path}")
                     success = create_pdf_module.create_pdf_from_screenshots(
                         screenshots_dir, 
-                        pdf_path, 
+                        temp_pdf_path, 
                         args.crop_ratio, 
                         args.strips_per_page,
                         sanitized_name  # Pass song title
                     )
                     
                     if success:
-                        print(f"✓ PDF created successfully: {pdf_path}")
+                        # Rename temporary PDF to final name
+                        try:
+                            os.rename(temp_pdf_path, final_pdf_path)
+                            print(f"✓ PDF created successfully: {final_pdf_path}")
+                            
+                            # Now rename the folder to final name if we're using temp folder
+                            if temp_main_folder and os.path.exists(temp_main_folder):
+                                try:
+                                    final_folder = os.path.join(os.getcwd(), sanitized_name)
+                                    os.rename(temp_main_folder, final_folder)
+                                    print(f"✓ Renamed temporary folder to: {final_folder}")
+                                except Exception as folder_rename_error:
+                                    print(f"Warning: Could not rename folder from {temp_main_folder} to {final_folder}: {folder_rename_error}")
+                                    print(f"PDF and screenshots remain in: {temp_main_folder}")
+                                    
+                        except Exception as rename_error:
+                            print(f"✓ PDF created but could not rename: {temp_pdf_path}")
+                            print(f"Rename error: {rename_error}")
                     else:
                         print(f"✗ PDF creation failed")
+                        # Clean up temporary PDF if it exists
+                        if os.path.exists(temp_pdf_path):
+                            try:
+                                os.remove(temp_pdf_path)
+                            except:
+                                pass
                 else:
                     raise Exception("Could not load create_pdf module")
                     
@@ -972,12 +1084,14 @@ def main():
                 # Fallback to subprocess with proper encoding
                 try:
                     import subprocess
-                    pdf_filename = f"{sanitized_name}_stacked.pdf"
+                    temp_subprocess_pdf = f"temp_subprocess_pdf_{uuid.uuid4().hex[:8]}.pdf"
+                    final_subprocess_pdf = f"{sanitized_name}_stacked.pdf"
+                    final_subprocess_path = os.path.join(main_folder, final_subprocess_pdf)
                     
                     # Run the PDF creation script with proper encoding
                     cmd = [
                         sys.executable, "create_pdf.py", screenshots_dir, 
-                        "--output", pdf_filename,
+                        "--output", temp_subprocess_pdf,
                         "--crop-ratio", str(args.crop_ratio),
                         "--strips-per-page", str(args.strips_per_page)
                     ]
@@ -992,26 +1106,69 @@ def main():
                     )
                     
                     if result.returncode == 0:
-                        print(f"✓ PDF created successfully: {pdf_filename}")
+                        # Rename temporary PDF to final name
+                        try:
+                            temp_subprocess_path = os.path.join(os.getcwd(), temp_subprocess_pdf)
+                            if os.path.exists(temp_subprocess_path):
+                                os.rename(temp_subprocess_path, final_subprocess_path)
+                                print(f"✓ PDF created successfully: {final_subprocess_pdf}")
+                                
+                                # Now rename the folder to final name if we're using temp folder
+                                if temp_main_folder and os.path.exists(temp_main_folder):
+                                    try:
+                                        final_folder = os.path.join(os.getcwd(), sanitized_name)
+                                        os.rename(temp_main_folder, final_folder)
+                                        print(f"✓ Renamed temporary folder to: {final_folder}")
+                                    except Exception as folder_rename_error:
+                                        print(f"Warning: Could not rename folder from {temp_main_folder} to {final_folder}: {folder_rename_error}")
+                                        print(f"PDF and screenshots remain in: {temp_main_folder}")
+                            else:
+                                print(f"✓ PDF creation completed but file not found at expected location")
+                        except Exception as rename_error:
+                            print(f"✓ PDF created but could not rename: {temp_subprocess_pdf}")
+                            print(f"Rename error: {rename_error}")
                     else:
                         print(f"✗ PDF creation failed:")
                         print(result.stderr)
+                        # Clean up temporary PDF if it exists
+                        temp_subprocess_path = os.path.join(os.getcwd(), temp_subprocess_pdf)
+                        if os.path.exists(temp_subprocess_path):
+                            try:
+                                os.remove(temp_subprocess_path)
+                            except:
+                                pass
                         
                 except Exception as e2:
                     print(f"✗ Both PDF creation methods failed: {e2}")
         else:
             print(f"✗ Screenshots directory not found: {screenshots_dir}")
+    else:
+        # If no PDF creation was requested, rename the folder now
+        if temp_main_folder and os.path.exists(temp_main_folder):
+            try:
+                final_folder = os.path.join(os.getcwd(), sanitized_name)
+                os.rename(temp_main_folder, final_folder)
+                print(f"✓ Renamed temporary folder to: {final_folder}")
+            except Exception as folder_rename_error:
+                print(f"Warning: Could not rename folder from {temp_main_folder} to {final_folder}: {folder_rename_error}")
+                print(f"Screenshots remain in: {temp_main_folder}")
     
-    # Cleanup downloaded file if exists
+    # Cleanup temporary and downloaded files
+    if temp_video_path and os.path.exists(temp_video_path):
+        try:
+            os.remove(temp_video_path)
+            print(f"✓ Cleaned up temporary file: {temp_video_path}")
+        except Exception as e:
+            print(f"Warning: Could not clean up temporary file: {e}")
+    
     if downloaded_file and os.path.exists(downloaded_file):
         try:
-            # Also clean up the temporary directory
+            # Also clean up the temporary directory for downloaded files
             temp_dir = os.path.dirname(downloaded_file)
-            import shutil
             shutil.rmtree(temp_dir)
             print(f"✓ Cleaned up downloaded file and temporary directory")
         except Exception as e:
-            print(f"Warning: Could not clean up temporary files: {e}")
+            print(f"Warning: Could not clean up downloaded files: {e}")
 
 if __name__ == "__main__":
     main()
