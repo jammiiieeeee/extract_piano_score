@@ -185,7 +185,13 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
         cropped_strips.append(cropped)
         
         # When we have enough strips or reached the end, create a page
-        if len(cropped_strips) >= calculated_strips_per_page or i == len(screenshot_files) - 1:
+        # For first page with song title, use one less strip
+        is_first_page = (page_count == 0)  # page_count hasn't been incremented yet
+        strips_for_current_page = calculated_strips_per_page
+        if is_first_page and song_title:
+            strips_for_current_page = max(1, calculated_strips_per_page - 1)
+        
+        if len(cropped_strips) >= strips_for_current_page or i == len(screenshot_files) - 1:
             # Stack all strips vertically
             stacked_image = stack_images_vertically(cropped_strips)
             
