@@ -1,0 +1,109 @@
+Video Analysis Log - JaneDoe
+Video Duration: 238.87 seconds
+Method: Change-based A/B capture (4.0% threshold, B at +2s)
+Start Time: 2s
+==================================================
+
+
+INITIAL A01: 2.2s -> 00_00m02s_A.jpg
+
+A02: 15.6s (22.3% >= 4.0%) -> 01_00m15s_A.jpg
+
+A03: 29.0s (13.6% >= 4.0%) -> 02_00m28s_A.jpg
+
+A04: 41.2s (15.4% >= 4.0%) -> 03_00m41s_A.jpg
+
+A05: 54.6s (11.4% >= 4.0%) -> 04_00m54s_A.jpg
+
+A06: 66.6s (11.6% >= 4.0%) -> 05_01m06s_A.jpg
+
+A07: 78.8s (13.1% >= 4.0%) -> 06_01m18s_A.jpg
+
+A08: 92.2s (12.8% >= 4.0%) -> 07_01m32s_A.jpg
+
+A09: 104.4s (11.6% >= 4.0%) -> 08_01m44s_A.jpg
+
+A10: 116.4s (12.3% >= 4.0%) -> 09_01m56s_A.jpg
+
+A11: 129.8s (15.4% >= 4.0%) -> 10_02m09s_A.jpg
+
+A12: 143.2s (15.3% >= 4.0%) -> 11_02m23s_A.jpg
+
+A13: 155.4s (17.0% >= 4.0%) -> 12_02m35s_A.jpg
+
+A14: 168.8s (15.5% >= 4.0%) -> 13_02m48s_A.jpg
+
+A15: 182.2s (15.6% >= 4.0%) -> 14_03m02s_A.jpg
+
+A16: 195.6s (11.9% >= 4.0%) -> 15_03m15s_A.jpg
+
+A17: 203.8s (13.8% >= 4.0%) -> 16_03m23s_A.jpg
+
+A18: 215.8s (16.3% >= 4.0%) -> 17_03m35s_A.jpg
+
+>>> MAJOR SCENE CHANGE DETECTED at 230.2s (88.7% >= 40.0%)
+>>> STOPPING CAPTURE PROCESS
+B00: 4.2s -> 00_00m04s_B.jpg
+B01: 17.6s -> 01_00m17s_B.jpg
+B02: 31.0s -> 02_00m30s_B.jpg
+B03: 43.2s -> 03_00m43s_B.jpg
+B04: 56.6s -> 04_00m56s_B.jpg
+B05: 68.6s -> 05_01m08s_B.jpg
+B06: 80.8s -> 06_01m20s_B.jpg
+B07: 94.2s -> 07_01m34s_B.jpg
+B08: 106.4s -> 08_01m46s_B.jpg
+B09: 118.4s -> 09_01m58s_B.jpg
+B10: 131.8s -> 10_02m11s_B.jpg
+B11: 145.2s -> 11_02m25s_B.jpg
+B12: 157.4s -> 12_02m37s_B.jpg
+B13: 170.8s -> 13_02m50s_B.jpg
+B14: 184.2s -> 14_03m04s_B.jpg
+B15: 197.6s -> 15_03m17s_B.jpg
+B16: 205.8s -> 16_03m25s_B.jpg
+B17: 217.8s -> 17_03m37s_B.jpg
+
+=== CAPTURE COMPLETE ===
+A screenshots: 18
+B screenshots: 18
+
+=== ADVANCED DUPLICATE DETECTION ===
+Screenshots to analyze: 18
+Analysis region: Top 27.0% of each image
+Test 1: 95.0% pixel similarity threshold
+Test 2: 94.0% row similarity (98.0% threshold per row)
+
+DUPLICATE: 14_03m02s_A.jpg vs 16_03m23s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_001
+
+=== DUPLICATE DETECTION COMPLETE ===
+Total duplicates found: 1 pairs
+
+=== MERGING UNIQUE A+B SCREENSHOTS ===
+Total A screenshots: 18
+Duplicate pairs found: 1
+Later duplicate indices: [16]
+Unique A screenshots to merge: 17
+
+MERGED: 00_00m02s_A.jpg + 00_00m04s_B.jpg -> 00_00_00m02s_merged.jpg
+MERGED: 01_00m15s_A.jpg + 01_00m17s_B.jpg -> 01_01_00m15s_merged.jpg
+MERGED: 02_00m28s_A.jpg + 02_00m30s_B.jpg -> 02_02_00m28s_merged.jpg
+MERGED: 03_00m41s_A.jpg + 03_00m43s_B.jpg -> 03_03_00m41s_merged.jpg
+MERGED: 04_00m54s_A.jpg + 04_00m56s_B.jpg -> 04_04_00m54s_merged.jpg
+MERGED: 05_01m06s_A.jpg + 05_01m08s_B.jpg -> 05_05_01m06s_merged.jpg
+MERGED: 06_01m18s_A.jpg + 06_01m20s_B.jpg -> 06_06_01m18s_merged.jpg
+MERGED: 07_01m32s_A.jpg + 07_01m34s_B.jpg -> 07_07_01m32s_merged.jpg
+MERGED: 08_01m44s_A.jpg + 08_01m46s_B.jpg -> 08_08_01m44s_merged.jpg
+MERGED: 09_01m56s_A.jpg + 09_01m58s_B.jpg -> 09_09_01m56s_merged.jpg
+MERGED: 10_02m09s_A.jpg + 10_02m11s_B.jpg -> 10_10_02m09s_merged.jpg
+MERGED: 11_02m23s_A.jpg + 11_02m25s_B.jpg -> 11_11_02m23s_merged.jpg
+MERGED: 12_02m35s_A.jpg + 12_02m37s_B.jpg -> 12_12_02m35s_merged.jpg
+MERGED: 13_02m48s_A.jpg + 13_02m50s_B.jpg -> 13_13_02m48s_merged.jpg
+MERGED: 14_03m02s_A.jpg + 14_03m04s_B.jpg -> 14_14_03m02s_merged.jpg
+MERGED: 15_03m15s_A.jpg + 15_03m17s_B.jpg -> 15_15_03m15s_merged.jpg
+MERGED: 17_03m35s_A.jpg + 17_03m37s_B.jpg -> 17_17_03m35s_merged.jpg
+
+=== MERGING COMPLETE ===
+Successfully merged: 17 screenshots
+

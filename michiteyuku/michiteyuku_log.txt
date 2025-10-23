@@ -39,11 +39,13 @@ A16: 278.6s (8.1% >= 4.0%) -> 15_04m38s_A.jpg
 
 A17: 292.0s (10.8% >= 4.0%) -> 16_04m51s_A.jpg
 
-A18: 310.0s (8.5% >= 4.0%) -> 17_05m09s_A.jpg
+SKIPPED A at 310.0s (within 10.0s buffer of video end at 317.8s)
 
-SKIPPED A at 317.0s (B would be at 319.0s > 317.8s)
+SKIPPED A at 310.2s (within 10.0s buffer of video end at 317.8s)
 
-SKIPPED A at 317.2s (B would be at 319.2s > 317.8s)
+SKIPPED A at 317.0s (within 10.0s buffer of video end at 317.8s)
+
+SKIPPED A at 317.2s (within 10.0s buffer of video end at 317.8s)
 B00: 4.2s -> 00_00m04s_B.jpg
 B01: 24.0s -> 01_00m23s_B.jpg
 B02: 40.6s -> 02_00m40s_B.jpg
@@ -61,14 +63,13 @@ B13: 247.4s -> 13_04m07s_B.jpg
 B14: 267.4s -> 14_04m27s_B.jpg
 B15: 280.6s -> 15_04m40s_B.jpg
 B16: 294.0s -> 16_04m53s_B.jpg
-B17: 312.0s -> 17_05m11s_B.jpg
 
 === CAPTURE COMPLETE ===
-A screenshots: 18
-B screenshots: 18
+A screenshots: 17
+B screenshots: 17
 
 === ADVANCED DUPLICATE DETECTION ===
-Screenshots to analyze: 18
+Screenshots to analyze: 17
 Analysis region: Top 27.0% of each image
 Test 1: 95.0% pixel similarity threshold
 Test 2: 94.0% row similarity (98.0% threshold per row)
@@ -77,10 +78,10 @@ Test 2: 94.0% row similarity (98.0% threshold per row)
 Total duplicates found: 0 pairs
 
 === MERGING UNIQUE A+B SCREENSHOTS ===
-Total A screenshots: 18
+Total A screenshots: 17
 Duplicate pairs found: 0
 Later duplicate indices: []
-Unique A screenshots to merge: 18
+Unique A screenshots to merge: 17
 
 MERGED: 00_00m02s_A.jpg + 00_00m04s_B.jpg -> 00_00_00m02s_merged.jpg
 MERGED: 01_00m21s_A.jpg + 01_00m23s_B.jpg -> 01_01_00m21s_merged.jpg
@@ -99,14 +100,13 @@ MERGED: 13_04m05s_A.jpg + 13_04m07s_B.jpg -> 13_13_04m05s_merged.jpg
 MERGED: 14_04m25s_A.jpg + 14_04m27s_B.jpg -> 14_14_04m25s_merged.jpg
 MERGED: 15_04m38s_A.jpg + 15_04m40s_B.jpg -> 15_15_04m38s_merged.jpg
 MERGED: 16_04m51s_A.jpg + 16_04m53s_B.jpg -> 16_16_04m51s_merged.jpg
-MERGED: 17_05m09s_A.jpg + 17_05m11s_B.jpg -> 17_17_05m09s_merged.jpg
 
 === MERGING COMPLETE ===
-Successfully merged: 18 screenshots
+Successfully merged: 17 screenshots
 
 
 === ADVANCED DUPLICATE DETECTION ===
-Screenshots to analyze: 18
+Screenshots to analyze: 17
 Analysis region: Top 27.0% of each image
 Test 1: 95.0% pixel similarity threshold
 Test 2: 94.0% row similarity (98.0% threshold per row)
@@ -115,10 +115,10 @@ Test 2: 94.0% row similarity (98.0% threshold per row)
 Total duplicates found: 0 pairs
 
 === MERGING UNIQUE A+B SCREENSHOTS ===
-Total A screenshots: 18
+Total A screenshots: 17
 Duplicate pairs found: 0
 Later duplicate indices: []
-Unique A screenshots to merge: 18
+Unique A screenshots to merge: 17
 
 MERGED: 00_00m02s_A.jpg + 00_00m04s_B.jpg -> 00_00_00m02s_merged.jpg
 MERGED: 01_00m21s_A.jpg + 01_00m23s_B.jpg -> 01_01_00m21s_merged.jpg
@@ -137,46 +137,7 @@ MERGED: 13_04m05s_A.jpg + 13_04m07s_B.jpg -> 13_13_04m05s_merged.jpg
 MERGED: 14_04m25s_A.jpg + 14_04m27s_B.jpg -> 14_14_04m25s_merged.jpg
 MERGED: 15_04m38s_A.jpg + 15_04m40s_B.jpg -> 15_15_04m38s_merged.jpg
 MERGED: 16_04m51s_A.jpg + 16_04m53s_B.jpg -> 16_16_04m51s_merged.jpg
-MERGED: 17_05m09s_A.jpg + 17_05m11s_B.jpg -> 17_17_05m09s_merged.jpg
 
 === MERGING COMPLETE ===
-Successfully merged: 18 screenshots
-
-
-=== ADVANCED DUPLICATE DETECTION ===
-Screenshots to analyze: 18
-Analysis region: Top 27.0% of each image
-Test 1: 95.0% pixel similarity threshold
-Test 2: 94.0% row similarity (98.0% threshold per row)
-
-=== DUPLICATE DETECTION COMPLETE ===
-Total duplicates found: 0 pairs
-
-=== MERGING UNIQUE A+B SCREENSHOTS ===
-Total A screenshots: 18
-Duplicate pairs found: 0
-Later duplicate indices: []
-Unique A screenshots to merge: 18
-
-MERGED: 00_00m02s_A.jpg + 00_00m04s_B.jpg -> 00_00_00m02s_merged.jpg
-MERGED: 01_00m21s_A.jpg + 01_00m23s_B.jpg -> 01_01_00m21s_merged.jpg
-MERGED: 02_00m38s_A.jpg + 02_00m40s_B.jpg -> 02_02_00m38s_merged.jpg
-MERGED: 03_00m55s_A.jpg + 03_00m57s_B.jpg -> 03_03_00m55s_merged.jpg
-MERGED: 04_01m15s_A.jpg + 04_01m17s_B.jpg -> 04_04_01m15s_merged.jpg
-MERGED: 05_01m35s_A.jpg + 05_01m37s_B.jpg -> 05_05_01m35s_merged.jpg
-MERGED: 06_01m55s_A.jpg + 06_01m57s_B.jpg -> 06_06_01m55s_merged.jpg
-MERGED: 07_02m11s_A.jpg + 07_02m13s_B.jpg -> 07_07_02m11s_merged.jpg
-MERGED: 08_02m28s_A.jpg + 08_02m30s_B.jpg -> 08_08_02m28s_merged.jpg
-MERGED: 09_02m48s_A.jpg + 09_02m50s_B.jpg -> 09_09_02m48s_merged.jpg
-MERGED: 10_03m08s_A.jpg + 10_03m10s_B.jpg -> 10_10_03m08s_merged.jpg
-MERGED: 11_03m25s_A.jpg + 11_03m27s_B.jpg -> 11_11_03m25s_merged.jpg
-MERGED: 12_03m45s_A.jpg + 12_03m47s_B.jpg -> 12_12_03m45s_merged.jpg
-MERGED: 13_04m05s_A.jpg + 13_04m07s_B.jpg -> 13_13_04m05s_merged.jpg
-MERGED: 14_04m25s_A.jpg + 14_04m27s_B.jpg -> 14_14_04m25s_merged.jpg
-MERGED: 15_04m38s_A.jpg + 15_04m40s_B.jpg -> 15_15_04m38s_merged.jpg
-MERGED: 16_04m51s_A.jpg + 16_04m53s_B.jpg -> 16_16_04m51s_merged.jpg
-MERGED: 17_05m09s_A.jpg + 17_05m11s_B.jpg -> 17_17_05m09s_merged.jpg
-
-=== MERGING COMPLETE ===
-Successfully merged: 18 screenshots
+Successfully merged: 17 screenshots
 

@@ -19,6 +19,7 @@ class Config:
     FRAME_CHECK_INTERVAL = 0.2             # Check frames every N seconds
     TOP_ANALYSIS_RATIO = 0.2               # Analyze top 20% of frame for changes
     MIN_SCREENSHOT_INTERVAL = 3.0          # Minimum seconds between screenshots
+    VIDEO_END_BUFFER = 10.0                # Don't capture A screenshots in last N seconds
     
     # ---- Duplicate Detection Thresholds ----
     DUPLICATE_TOP_RATIO = 0.27             # Analyze top 27% for duplicate detection
@@ -266,6 +267,13 @@ def _extract_ab_time_based(cap, fps, duration, start_time, interval, raw_dir, lo
     while current_time < duration:
         b_time = current_time + 2.0  # B screenshot 2 seconds later
         
+        # Check if A screenshot is too close to video end (apply VIDEO_END_BUFFER rule)
+        if current_time > (duration - Config.VIDEO_END_BUFFER):
+            with open(log_path, 'a', encoding='utf-8') as log_file:
+                log_file.write(f"SKIPPED A at {current_time:.1f}s (within {Config.VIDEO_END_BUFFER}s buffer of video end at {duration:.1f}s)\n")
+            current_time += interval
+            continue
+        
         if b_time < duration:  # Only capture A if B is possible
             # Capture A screenshot
             frame_number = int(current_time * fps)
@@ -347,6 +355,9 @@ def _extract_ab_change_based(cap, fps, duration, start_time, change_threshold, r
     last_progress_update = 0
     screenshot_count = 0
     
+    # Frame change tracking for visualization
+    frame_change_data = []  # List of (time, change_percentage) tuples
+    
     # Phase 1: Analyze and capture A screenshots
     print("Phase 1: Analyzing content changes and capturing A screenshots...")
     
@@ -371,6 +382,9 @@ def _extract_ab_change_based(cap, fps, duration, start_time, change_threshold, r
             if previous_frame is not None:
                 change_percentage = detect_frame_change(previous_frame, frame, top_ratio=Config.TOP_ANALYSIS_RATIO)
                 
+                # Store frame change data for visualization
+                frame_change_data.append((current_time, change_percentage))
+                
                 # Check for major scene change
                 if change_percentage >= Config.MAJOR_SCENE_CHANGE_THRESHOLD:
                     with open(log_path, 'a', encoding='utf-8') as log_file:
@@ -382,9 +396,32 @@ def _extract_ab_change_based(cap, fps, duration, start_time, change_threshold, r
                 
                 # Check if change exceeds threshold and minimum interval has passed
                 if change_percentage >= (change_threshold * 100) and frames_since_last_screenshot >= min_interval_frames:
-                    b_time = current_time + 2.0  # B screenshot 2 seconds later
-                    
-                    if b_time < duration:  # Only capture A if B is possible
+                    # Check if A screenshot is too close to video end (apply VIDEO_END_BUFFER rule)
+                    if current_time > (duration - Config.VIDEO_END_BUFFER):
+                        with open(log_path, 'a', encoding='utf-8') as log_file:
+                            log_file.write(f"\nSKIPPED A at {current_time:.1f}s (within {Config.VIDEO_END_BUFFER}s buffer of video end at {duration:.1f}s)\n")
+                    else:
+                        b_time = current_time + 2.0  # B screenshot 2 seconds later
+                        
+                        if b_time < duration:  # Only capture A if B is possible
+                            a_filename = f"{screenshot_count:02d}_{format_time(current_time)}_A.jpg"
+                            a_path = os.path.join(raw_dir, a_filename)
+                            
+                            if cv2.imwrite(a_path, frame):
+                                screenshot_pairs.append((screenshot_count, current_time, b_time))
+                                screenshot_count += 1
+                                frames_since_last_screenshot = 0
+                                
+                                with open(log_path, 'a', encoding='utf-8') as log_file:
+                                    log_file.write(f"\nA{screenshot_count:02d}: {current_time:.1f}s ({change_percentage:.1f}% >= {change_threshold*100}%) -> {a_filename}\n")
+                        else:
+                            with open(log_path, 'a', encoding='utf-8') as log_file:
+                                log_file.write(f"\nSKIPPED A at {current_time:.1f}s (B would be at {b_time:.1f}s > {duration:.1f}s)\n")
+            else:
+                # Save first frame if B is possible and not within video end buffer
+                if current_time <= (duration - Config.VIDEO_END_BUFFER):
+                    b_time = current_time + 2.0
+                    if b_time < duration:
                         a_filename = f"{screenshot_count:02d}_{format_time(current_time)}_A.jpg"
                         a_path = os.path.join(raw_dir, a_filename)
                         
@@ -394,24 +431,10 @@ def _extract_ab_change_based(cap, fps, duration, start_time, change_threshold, r
                             frames_since_last_screenshot = 0
                             
                             with open(log_path, 'a', encoding='utf-8') as log_file:
-                                log_file.write(f"\nA{screenshot_count:02d}: {current_time:.1f}s ({change_percentage:.1f}% >= {change_threshold*100}%) -> {a_filename}\n")
-                    else:
-                        with open(log_path, 'a', encoding='utf-8') as log_file:
-                            log_file.write(f"\nSKIPPED A at {current_time:.1f}s (B would be at {b_time:.1f}s > {duration:.1f}s)\n")
-            else:
-                # Save first frame if B is possible
-                b_time = current_time + 2.0
-                if b_time < duration:
-                    a_filename = f"{screenshot_count:02d}_{format_time(current_time)}_A.jpg"
-                    a_path = os.path.join(raw_dir, a_filename)
-                    
-                    if cv2.imwrite(a_path, frame):
-                        screenshot_pairs.append((screenshot_count, current_time, b_time))
-                        screenshot_count += 1
-                        frames_since_last_screenshot = 0
-                        
-                        with open(log_path, 'a', encoding='utf-8') as log_file:
-                            log_file.write(f"\nINITIAL A{screenshot_count:02d}: {current_time:.1f}s -> {a_filename}\n")
+                                log_file.write(f"\nINITIAL A{screenshot_count:02d}: {current_time:.1f}s -> {a_filename}\n")
+                else:
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f"\nSKIPPED INITIAL A at {current_time:.1f}s (within {Config.VIDEO_END_BUFFER}s buffer of video end at {duration:.1f}s)\n")
         
         # Update previous frame every check interval
         if frame_count % check_interval_frames == 0:
@@ -439,7 +462,15 @@ def _extract_ab_change_based(cap, fps, duration, start_time, change_threshold, r
         log_file.write(f"A screenshots: {len(screenshot_pairs)}\n")
         log_file.write(f"B screenshots: {b_captured}\n")
     
+    # Save frame change data for visualization
+    frame_change_file = log_path.replace('_log.txt', '_frame_changes.txt')
+    with open(frame_change_file, 'w', encoding='utf-8') as f:
+        f.write("Time(s),ChangePercentage\n")
+        for time_val, change_val in frame_change_data:
+            f.write(f"{time_val:.2f},{change_val:.2f}\n")
+    
     print(f"✓ Captured {len(screenshot_pairs)} A screenshots and {b_captured} B screenshots")
+    print(f"✓ Frame change data saved: {frame_change_file}")
     return True
 
 def format_time(seconds):
@@ -710,7 +741,7 @@ def merge_unique_ab_screenshots(raw_dir, result_dir, duplicates, log_path):
     return merged_count
 
 def generate_triple_heatmap(raw_dir, duplicates, heatmap_path, sanitized_name):
-    """Generate triple heatmap: Test 1 similarities, Test 2 similarities, Boolean duplicate map"""
+    """Generate comprehensive analysis dashboard: frame change plot, similarity heatmaps, and duplicate map"""
     try:
         import plotly.graph_objects as go
         from plotly.subplots import make_subplots
@@ -728,9 +759,27 @@ def generate_triple_heatmap(raw_dir, duplicates, heatmap_path, sanitized_name):
         print("Not enough screenshots for heatmap generation.")
         return
     
-    print(f"Generating similarity heatmaps for {n} screenshots...")
+    print(f"Generating comprehensive analysis dashboard for {n} screenshots...")
     
-    # Initialize matrices
+    # Load frame change data if available
+    main_folder = Path(raw_dir).parent.parent
+    frame_change_file = main_folder / f"{sanitized_name}_frame_changes.txt"
+    frame_times = []
+    frame_changes = []
+    
+    if frame_change_file.exists():
+        try:
+            with open(frame_change_file, 'r', encoding='utf-8') as f:
+                lines = f.readlines()[1:]  # Skip header
+                for line in lines:
+                    time_val, change_val = line.strip().split(',')
+                    frame_times.append(float(time_val))
+                    frame_changes.append(float(change_val))
+            print(f"Loaded {len(frame_times)} frame change data points")
+        except Exception as e:
+            print(f"Could not load frame change data: {e}")
+    
+    # Initialize similarity matrices
     test1_matrix = np.zeros((n, n))
     test2_matrix = np.zeros((n, n))
     duplicate_matrix = np.zeros((n, n))
@@ -787,100 +836,234 @@ def generate_triple_heatmap(raw_dir, duplicates, heatmap_path, sanitized_name):
             test2_matrix[i, j] = test2_matrix[j, i] = test2_similarity
             duplicate_matrix[i, j] = duplicate_matrix[j, i] = 1 if is_duplicate else 0
     
-    # Create screenshot labels
+    # Create screenshot labels with better spacing
     labels = [f"{i:02d}_{f.stem.replace('_A', '')}" for i, f in enumerate(a_files)]
     
-    # Create the triple heatmap
-    fig = make_subplots(
-        rows=1, cols=3,
-        subplot_titles=[
-            f"Test 1: Pixel Similarity (≥{Config.PIXEL_SIMILARITY_THRESHOLD*100}% = duplicate)",
-            f"Test 2: Row Similarity (≥{Config.ROW_COVERAGE_THRESHOLD*100}% = duplicate)",
-            f"Boolean Duplicate Map ({len(duplicates)} pairs found)"
-        ],
-        horizontal_spacing=0.1
-    )
+    # Create a 2x2 subplot layout for comprehensive dashboard
+    if frame_times and frame_changes:
+        # Create 2x2 subplot with frame change plot
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=[
+                f"Frame Change Analysis (every {Config.FRAME_CHECK_INTERVAL}s)",
+                f"Test 1: Pixel Similarity (≥{Config.PIXEL_SIMILARITY_THRESHOLD*100}% = duplicate)",
+                f"Test 2: Row Similarity (≥{Config.ROW_COVERAGE_THRESHOLD*100}% = duplicate)",
+                f"Boolean Duplicate Map ({len(duplicates)} pairs found)"
+            ],
+            vertical_spacing=0.12,
+            horizontal_spacing=0.08,
+            specs=[[{"type": "scatter"}, {"type": "heatmap"}],
+                   [{"type": "heatmap"}, {"type": "heatmap"}]]
+        )
+        
+        # Frame change plot (top left)
+        fig.add_trace(
+            go.Scatter(
+                x=frame_times,
+                y=frame_changes,
+                mode='lines+markers',
+                name='Frame Change %',
+                line=dict(width=2, color='blue'),
+                marker=dict(size=4),
+                hovertemplate='Time: %{x:.1f}s<br>Change: %{y:.2f}%<extra></extra>'
+            ),
+            row=1, col=1
+        )
+        
+        # Add threshold lines to frame change plot
+        fig.add_hline(y=Config.CHANGE_DETECTION_THRESHOLD*100, line_dash="dash", 
+                     line_color="orange", annotation_text=f"Capture Threshold ({Config.CHANGE_DETECTION_THRESHOLD*100}%)")
+        fig.add_hline(y=Config.MAJOR_SCENE_CHANGE_THRESHOLD, line_dash="dash", 
+                     line_color="red", annotation_text=f"Major Change Threshold ({Config.MAJOR_SCENE_CHANGE_THRESHOLD}%)")
+        
+        # Add screenshot capture markers
+        screenshot_times = []
+        for a_file in a_files:
+            time_match = re.search(r'(\d{2})m(\d{2})s', a_file.name)
+            if time_match:
+                minutes, seconds = time_match.groups()
+                time_val = int(minutes) * 60 + int(seconds)
+                screenshot_times.append(time_val)
+        
+        if screenshot_times:
+            # Find corresponding change values for screenshot times
+            screenshot_changes = []
+            for st in screenshot_times:
+                # Find closest frame time
+                closest_idx = min(range(len(frame_times)), key=lambda i: abs(frame_times[i] - st))
+                screenshot_changes.append(frame_changes[closest_idx])
+            
+            fig.add_trace(
+                go.Scatter(
+                    x=screenshot_times,
+                    y=screenshot_changes,
+                    mode='markers',
+                    name='Screenshots Taken',
+                    marker=dict(size=8, color='red', symbol='diamond'),
+                    hovertemplate='Screenshot at %{x:.1f}s<br>Change: %{y:.2f}%<extra></extra>'
+                ),
+                row=1, col=1
+            )
+        
+        # Test 1 heatmap (top right)
+        fig.add_trace(
+            go.Heatmap(
+                z=test1_matrix,
+                x=labels,
+                y=labels,
+                colorscale='RdYlBu_r',
+                zmin=0,
+                zmax=1,
+                showscale=True,
+                colorbar=dict(title="Pixel Similarity", x=0.95, len=0.4, y=0.8)
+            ),
+            row=1, col=2
+        )
+        
+        # Test 2 heatmap (bottom left)
+        fig.add_trace(
+            go.Heatmap(
+                z=test2_matrix,
+                x=labels,
+                y=labels,
+                colorscale='RdYlBu_r',
+                zmin=0,
+                zmax=1,
+                showscale=True,
+                colorbar=dict(title="Row Similarity", x=0.48, len=0.4, y=0.2)
+            ),
+            row=2, col=1
+        )
+        
+        # Boolean duplicate map (bottom right)
+        fig.add_trace(
+            go.Heatmap(
+                z=duplicate_matrix,
+                x=labels,
+                y=labels,
+                colorscale=[[0, 'white'], [1, 'red']],
+                showscale=True,
+                colorbar=dict(title="Duplicate", x=0.95, len=0.4, y=0.2)
+            ),
+            row=2, col=2
+        )
+        
+        # Update layout for 2x2
+        fig.update_layout(
+            title=f"Comprehensive Video Analysis Dashboard - {sanitized_name}",
+            height=1000,
+            width=1400,
+            font=dict(size=10),
+            showlegend=True
+        )
+    else:
+        # Fallback to 1x3 layout if no frame change data
+        fig = make_subplots(
+            rows=1, cols=3,
+            subplot_titles=[
+                f"Test 1: Pixel Similarity (≥{Config.PIXEL_SIMILARITY_THRESHOLD*100}% = duplicate)",
+                f"Test 2: Row Similarity (≥{Config.ROW_COVERAGE_THRESHOLD*100}% = duplicate)",
+                f"Boolean Duplicate Map ({len(duplicates)} pairs found)"
+            ],
+            horizontal_spacing=0.08
+        )
+        
+        # Test 1 heatmap
+        fig.add_trace(
+            go.Heatmap(
+                z=test1_matrix,
+                x=labels,
+                y=labels,
+                colorscale='RdYlBu_r',
+                zmin=0,
+                zmax=1,
+                showscale=True,
+                colorbar=dict(title="Pixel Similarity", x=0.35)
+            ),
+            row=1, col=1
+        )
+        
+        # Test 2 heatmap
+        fig.add_trace(
+            go.Heatmap(
+                z=test2_matrix,
+                x=labels,
+                y=labels,
+                colorscale='RdYlBu_r',
+                zmin=0,
+                zmax=1,
+                showscale=True,
+                colorbar=dict(title="Row Similarity", x=0.68)
+            ),
+            row=1, col=2
+        )
+        
+        # Boolean duplicate map
+        fig.add_trace(
+            go.Heatmap(
+                z=duplicate_matrix,
+                x=labels,
+                y=labels,
+                colorscale=[[0, 'white'], [1, 'red']],
+                showscale=True,
+                colorbar=dict(title="Duplicate", x=1.0)
+            ),
+            row=1, col=3
+        )
+        
+        # Update layout for 1x3
+        fig.update_layout(
+            title=f"Screenshot Similarity Analysis - {sanitized_name}",
+            height=600,
+            width=1800,
+            font=dict(size=10)
+        )
     
-    # Test 1 heatmap (pixel similarity)
-    fig.add_trace(
-        go.Heatmap(
-            z=test1_matrix,
-            x=labels,
-            y=labels,
-            colorscale='RdYlBu_r',
-            zmin=0,
-            zmax=1,
-            showscale=True,
-            colorbar=dict(title="Pixel Similarity", x=0.3)
-        ),
-        row=1, col=1
-    )
+    # Improve label spacing and readability for all heatmaps
+    fig.update_xaxes(tickangle=45, tickfont=dict(size=8))
+    fig.update_yaxes(tickfont=dict(size=8))
     
-    # Test 2 heatmap (row similarity)
-    fig.add_trace(
-        go.Heatmap(
-            z=test2_matrix,
-            x=labels,
-            y=labels,
-            colorscale='RdYlBu_r',
-            zmin=0,
-            zmax=1,
-            showscale=True,
-            colorbar=dict(title="Row Similarity", x=0.65)
-        ),
-        row=1, col=2
-    )
+    # Add margin for better label visibility
+    fig.update_layout(margin=dict(l=80, r=80, t=120, b=100))
     
-    # Boolean duplicate map
-    fig.add_trace(
-        go.Heatmap(
-            z=duplicate_matrix,
-            x=labels,
-            y=labels,
-            colorscale=[[0, 'white'], [1, 'red']],
-            showscale=True,
-            colorbar=dict(title="Duplicate", x=1.0)
-        ),
-        row=1, col=3
-    )
-    
-    # Update layout
-    fig.update_layout(
-        title=f"Screenshot Similarity Analysis - {sanitized_name}",
-        height=600,
-        width=1800,
-        font=dict(size=10)
-    )
-    
-    # Rotate x-axis labels
-    fig.update_xaxes(tickangle=45)
-    
-    # Add statistics annotations
-    test1_count = np.sum(test1_matrix >= Config.PIXEL_SIMILARITY_THRESHOLD) // 2  # Divide by 2 due to symmetry
+    # Add comprehensive statistics annotation
+    test1_count = np.sum(test1_matrix >= Config.PIXEL_SIMILARITY_THRESHOLD) // 2
     test2_count = np.sum(test2_matrix >= Config.ROW_COVERAGE_THRESHOLD) // 2
     total_pairs = n * (n - 1) // 2
     
-    annotation_text = (
-        f"Statistics:<br>"
-        f"Total pairs: {total_pairs}<br>"
-        f"Test 1 threshold hits: {test1_count}<br>"
-        f"Test 2 threshold hits: {test2_count}<br>"
-        f"Duplicates found: {len(duplicates)}"
+    stats_text = (
+        f"<b>Analysis Statistics:</b><br>"
+        f"• Total screenshot pairs: {total_pairs}<br>"
+        f"• Test 1 threshold hits: {test1_count}<br>"
+        f"• Test 2 threshold hits: {test2_count}<br>"
+        f"• Duplicates found: {len(duplicates)}<br>"
+        f"• Unique screenshots: {n - len(set(dup[1] for dup in duplicates))}<br>"
     )
     
+    if frame_times and frame_changes:
+        avg_change = sum(frame_changes) / len(frame_changes)
+        max_change = max(frame_changes)
+        stats_text += (
+            f"• Frame change points: {len(frame_times)}<br>"
+            f"• Average change: {avg_change:.2f}%<br>"
+            f"• Maximum change: {max_change:.2f}%"
+        )
+    
     fig.add_annotation(
-        text=annotation_text,
+        text=stats_text,
         xref="paper", yref="paper",
         x=0.02, y=0.98,
         xanchor="left", yanchor="top",
-        bgcolor="rgba(255,255,255,0.8)",
+        bgcolor="rgba(255,255,255,0.9)",
         bordercolor="black",
-        borderwidth=1
+        borderwidth=1,
+        font=dict(size=10)
     )
     
-    # Save the heatmap
+    # Save the comprehensive dashboard
     fig.write_html(heatmap_path)
-    print(f"✓ Triple heatmap saved: {heatmap_path}")
+    dashboard_type = "comprehensive dashboard" if frame_times and frame_changes else "similarity analysis"
+    print(f"✓ {dashboard_type.title()} saved: {heatmap_path}")
 
 def calculate_row_similarity(img1, img2):
     """Calculate overall row similarity percentage for Test 2"""

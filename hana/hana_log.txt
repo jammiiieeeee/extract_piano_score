@@ -27,43 +27,41 @@ A10: 106.6s (15.1% >= 4.0%) -> 09_01m46s_A.jpg
 
 A11: 112.4s (14.3% >= 4.0%) -> 10_01m52s_A.jpg
 
-A12: 114.4s (13.3% >= 4.0%) -> 11_01m54s_A.jpg
+A12: 126.0s (11.7% >= 4.0%) -> 11_02m05s_A.jpg
 
-A13: 126.0s (11.7% >= 4.0%) -> 12_02m05s_A.jpg
+A13: 137.8s (11.9% >= 4.0%) -> 12_02m17s_A.jpg
 
-A14: 137.8s (11.9% >= 4.0%) -> 13_02m17s_A.jpg
+A14: 149.4s (10.5% >= 4.0%) -> 13_02m29s_A.jpg
 
-A15: 149.4s (10.5% >= 4.0%) -> 14_02m29s_A.jpg
+A15: 159.2s (11.4% >= 4.0%) -> 14_02m39s_A.jpg
 
-A16: 159.2s (11.4% >= 4.0%) -> 15_02m39s_A.jpg
+A16: 163.2s (10.3% >= 4.0%) -> 15_02m43s_A.jpg
 
-A17: 163.2s (10.3% >= 4.0%) -> 16_02m43s_A.jpg
+A17: 171.0s (9.3% >= 4.0%) -> 16_02m50s_A.jpg
 
-A18: 171.0s (9.3% >= 4.0%) -> 17_02m50s_A.jpg
+A18: 174.8s (12.6% >= 4.0%) -> 17_02m54s_A.jpg
 
-A19: 174.8s (12.6% >= 4.0%) -> 18_02m54s_A.jpg
+A19: 184.6s (13.2% >= 4.0%) -> 18_03m04s_A.jpg
 
-A20: 184.6s (13.2% >= 4.0%) -> 19_03m04s_A.jpg
+A20: 196.2s (10.5% >= 4.0%) -> 19_03m16s_A.jpg
 
-A21: 196.2s (10.5% >= 4.0%) -> 20_03m16s_A.jpg
+A21: 204.0s (10.7% >= 4.0%) -> 20_03m23s_A.jpg
 
-A22: 204.0s (10.7% >= 4.0%) -> 21_03m23s_A.jpg
+A22: 210.0s (10.9% >= 4.0%) -> 21_03m29s_A.jpg
 
-A23: 210.0s (10.9% >= 4.0%) -> 22_03m29s_A.jpg
+A23: 219.6s (9.8% >= 4.0%) -> 22_03m39s_A.jpg
 
-A24: 219.6s (9.8% >= 4.0%) -> 23_03m39s_A.jpg
+A24: 229.4s (11.5% >= 4.0%) -> 23_03m49s_A.jpg
 
-A25: 229.4s (11.5% >= 4.0%) -> 24_03m49s_A.jpg
+A25: 235.2s (11.5% >= 4.0%) -> 24_03m55s_A.jpg
 
-A26: 235.2s (11.5% >= 4.0%) -> 25_03m55s_A.jpg
-
-A27: 246.2s (5.1% >= 4.0%) -> 26_04m06s_A.jpg
+A26: 246.2s (5.1% >= 4.0%) -> 25_04m06s_A.jpg
 
 SKIPPED A at 254.4s (B would be at 256.4s > 255.4s)
 
 SKIPPED A at 254.6s (B would be at 256.6s > 255.4s)
 
->>> MAJOR SCENE CHANGE DETECTED at 255.4s (94.7% >= 70.0%)
+>>> MAJOR SCENE CHANGE DETECTED at 255.4s (94.7% >= 40.0%)
 >>> STOPPING CAPTURE PROCESS
 B00: 4.2s -> 00_00m04s_B.jpg
 B01: 14.8s -> 01_00m14s_B.jpg
@@ -76,29 +74,28 @@ B07: 85.2s -> 07_01m25s_B.jpg
 B08: 96.8s -> 08_01m36s_B.jpg
 B09: 108.6s -> 09_01m48s_B.jpg
 B10: 114.4s -> 10_01m54s_B.jpg
-B11: 116.4s -> 11_01m56s_B.jpg
-B12: 128.0s -> 12_02m07s_B.jpg
-B13: 139.8s -> 13_02m19s_B.jpg
-B14: 151.4s -> 14_02m31s_B.jpg
-B15: 161.2s -> 15_02m41s_B.jpg
-B16: 165.2s -> 16_02m45s_B.jpg
-B17: 173.0s -> 17_02m52s_B.jpg
-B18: 176.8s -> 18_02m56s_B.jpg
-B19: 186.6s -> 19_03m06s_B.jpg
-B20: 198.2s -> 20_03m18s_B.jpg
-B21: 206.0s -> 21_03m25s_B.jpg
-B22: 212.0s -> 22_03m31s_B.jpg
-B23: 221.6s -> 23_03m41s_B.jpg
-B24: 231.4s -> 24_03m51s_B.jpg
-B25: 237.2s -> 25_03m57s_B.jpg
-B26: 248.2s -> 26_04m08s_B.jpg
+B11: 128.0s -> 11_02m07s_B.jpg
+B12: 139.8s -> 12_02m19s_B.jpg
+B13: 151.4s -> 13_02m31s_B.jpg
+B14: 161.2s -> 14_02m41s_B.jpg
+B15: 165.2s -> 15_02m45s_B.jpg
+B16: 173.0s -> 16_02m52s_B.jpg
+B17: 176.8s -> 17_02m56s_B.jpg
+B18: 186.6s -> 18_03m06s_B.jpg
+B19: 198.2s -> 19_03m18s_B.jpg
+B20: 206.0s -> 20_03m25s_B.jpg
+B21: 212.0s -> 21_03m31s_B.jpg
+B22: 221.6s -> 22_03m41s_B.jpg
+B23: 231.4s -> 23_03m51s_B.jpg
+B24: 237.2s -> 24_03m57s_B.jpg
+B25: 248.2s -> 25_04m08s_B.jpg
 
 === CAPTURE COMPLETE ===
-A screenshots: 27
-B screenshots: 27
+A screenshots: 26
+B screenshots: 26
 
 === ADVANCED DUPLICATE DETECTION ===
-Screenshots to analyze: 27
+Screenshots to analyze: 26
 Analysis region: Top 27.0% of each image
 Test 1: 95.0% pixel similarity threshold
 Test 2: 94.0% row similarity (98.0% threshold per row)
@@ -108,93 +105,88 @@ DUPLICATE: 02_00m24s_A.jpg vs 10_01m52s_A.jpg
   Test 2 (row): PASS
   Saved as: duplicate_pair_001
 
-DUPLICATE: 03_00m36s_A.jpg vs 11_01m54s_A.jpg
+DUPLICATE: 04_00m47s_A.jpg vs 11_02m05s_A.jpg
   Test 1 (pixel): FAIL
   Test 2 (row): PASS
   Saved as: duplicate_pair_002
 
-DUPLICATE: 04_00m47s_A.jpg vs 12_02m05s_A.jpg
+DUPLICATE: 04_00m47s_A.jpg vs 17_02m54s_A.jpg
   Test 1 (pixel): FAIL
   Test 2 (row): PASS
   Saved as: duplicate_pair_003
 
-DUPLICATE: 04_00m47s_A.jpg vs 18_02m54s_A.jpg
+DUPLICATE: 05_00m59s_A.jpg vs 12_02m17s_A.jpg
   Test 1 (pixel): FAIL
   Test 2 (row): PASS
   Saved as: duplicate_pair_004
 
-DUPLICATE: 05_00m59s_A.jpg vs 13_02m17s_A.jpg
+DUPLICATE: 05_00m59s_A.jpg vs 18_03m04s_A.jpg
   Test 1 (pixel): FAIL
   Test 2 (row): PASS
   Saved as: duplicate_pair_005
 
-DUPLICATE: 05_00m59s_A.jpg vs 19_03m04s_A.jpg
+DUPLICATE: 06_01m11s_A.jpg vs 13_02m29s_A.jpg
   Test 1 (pixel): FAIL
   Test 2 (row): PASS
   Saved as: duplicate_pair_006
 
-DUPLICATE: 06_01m11s_A.jpg vs 14_02m29s_A.jpg
+DUPLICATE: 06_01m11s_A.jpg vs 19_03m16s_A.jpg
   Test 1 (pixel): FAIL
   Test 2 (row): PASS
   Saved as: duplicate_pair_007
 
-DUPLICATE: 06_01m11s_A.jpg vs 20_03m16s_A.jpg
+DUPLICATE: 09_01m46s_A.jpg vs 14_02m39s_A.jpg
   Test 1 (pixel): FAIL
   Test 2 (row): PASS
   Saved as: duplicate_pair_008
 
-DUPLICATE: 09_01m46s_A.jpg vs 15_02m39s_A.jpg
+DUPLICATE: 11_02m05s_A.jpg vs 17_02m54s_A.jpg
   Test 1 (pixel): FAIL
   Test 2 (row): PASS
   Saved as: duplicate_pair_009
 
-DUPLICATE: 12_02m05s_A.jpg vs 18_02m54s_A.jpg
+DUPLICATE: 12_02m17s_A.jpg vs 18_03m04s_A.jpg
   Test 1 (pixel): FAIL
   Test 2 (row): PASS
   Saved as: duplicate_pair_010
 
-DUPLICATE: 13_02m17s_A.jpg vs 19_03m04s_A.jpg
+DUPLICATE: 13_02m29s_A.jpg vs 19_03m16s_A.jpg
   Test 1 (pixel): FAIL
   Test 2 (row): PASS
   Saved as: duplicate_pair_011
 
-DUPLICATE: 14_02m29s_A.jpg vs 20_03m16s_A.jpg
+DUPLICATE: 16_02m50s_A.jpg vs 20_03m23s_A.jpg
   Test 1 (pixel): FAIL
   Test 2 (row): PASS
   Saved as: duplicate_pair_012
 
-DUPLICATE: 17_02m50s_A.jpg vs 21_03m23s_A.jpg
+DUPLICATE: 21_03m29s_A.jpg vs 23_03m49s_A.jpg
   Test 1 (pixel): FAIL
   Test 2 (row): PASS
   Saved as: duplicate_pair_013
 
-DUPLICATE: 22_03m29s_A.jpg vs 24_03m49s_A.jpg
+DUPLICATE: 22_03m39s_A.jpg vs 24_03m55s_A.jpg
   Test 1 (pixel): FAIL
   Test 2 (row): PASS
   Saved as: duplicate_pair_014
 
-DUPLICATE: 23_03m39s_A.jpg vs 25_03m55s_A.jpg
+DUPLICATE: 22_03m39s_A.jpg vs 25_04m06s_A.jpg
   Test 1 (pixel): FAIL
   Test 2 (row): PASS
   Saved as: duplicate_pair_015
 
-DUPLICATE: 23_03m39s_A.jpg vs 26_04m06s_A.jpg
+DUPLICATE: 24_03m55s_A.jpg vs 25_04m06s_A.jpg
   Test 1 (pixel): FAIL
   Test 2 (row): PASS
   Saved as: duplicate_pair_016
 
-DUPLICATE: 25_03m55s_A.jpg vs 26_04m06s_A.jpg
-  Test 1 (pixel): FAIL
-  Test 2 (row): PASS
-  Saved as: duplicate_pair_017
-
 === DUPLICATE DETECTION COMPLETE ===
-Total duplicates found: 17 pairs
+Total duplicates found: 16 pairs
 
 === MERGING UNIQUE A+B SCREENSHOTS ===
-Total A screenshots: 27
-Duplicate pairs found: 17
-Later duplicate indices: [10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 24, 25, 26]
+Total A screenshots: 26
+Duplicate pairs found: 16
+Later duplicate indices: [10, 11, 12, 13, 14, 17, 18, 19, 20, 23, 24, 25]
 Unique A screenshots to merge: 14
 
 MERGED: 00_00m02s_A.jpg + 00_00m04s_B.jpg -> 00_00_00m02s_merged.jpg
@@ -207,10 +199,10 @@ MERGED: 06_01m11s_A.jpg + 06_01m13s_B.jpg -> 06_06_01m11s_merged.jpg
 MERGED: 07_01m23s_A.jpg + 07_01m25s_B.jpg -> 07_07_01m23s_merged.jpg
 MERGED: 08_01m34s_A.jpg + 08_01m36s_B.jpg -> 08_08_01m34s_merged.jpg
 MERGED: 09_01m46s_A.jpg + 09_01m48s_B.jpg -> 09_09_01m46s_merged.jpg
-MERGED: 16_02m43s_A.jpg + 16_02m45s_B.jpg -> 16_16_02m43s_merged.jpg
-MERGED: 17_02m50s_A.jpg + 17_02m52s_B.jpg -> 17_17_02m50s_merged.jpg
-MERGED: 22_03m29s_A.jpg + 22_03m31s_B.jpg -> 22_22_03m29s_merged.jpg
-MERGED: 23_03m39s_A.jpg + 23_03m41s_B.jpg -> 23_23_03m39s_merged.jpg
+MERGED: 15_02m43s_A.jpg + 15_02m45s_B.jpg -> 15_15_02m43s_merged.jpg
+MERGED: 16_02m50s_A.jpg + 16_02m52s_B.jpg -> 16_16_02m50s_merged.jpg
+MERGED: 21_03m29s_A.jpg + 21_03m31s_B.jpg -> 21_21_03m29s_merged.jpg
+MERGED: 22_03m39s_A.jpg + 22_03m41s_B.jpg -> 22_22_03m39s_merged.jpg
 
 === MERGING COMPLETE ===
 Successfully merged: 14 screenshots
