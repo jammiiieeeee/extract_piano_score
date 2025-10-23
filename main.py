@@ -15,10 +15,10 @@ class Config:
     
     # ---- Video Analysis Thresholds ----
     CHANGE_DETECTION_THRESHOLD = 0.04      # Default change detection threshold (4%)
-    MAJOR_SCENE_CHANGE_THRESHOLD = 70.0    # Major scene change detection (70%)
+    MAJOR_SCENE_CHANGE_THRESHOLD = 40.0    # Major scene change detection (70%)
     FRAME_CHECK_INTERVAL = 0.2             # Check frames every N seconds
     TOP_ANALYSIS_RATIO = 0.2               # Analyze top 20% of frame for changes
-    MIN_SCREENSHOT_INTERVAL = 2.0          # Minimum seconds between screenshots
+    MIN_SCREENSHOT_INTERVAL = 3.0          # Minimum seconds between screenshots
     
     # ---- Duplicate Detection Thresholds ----
     DUPLICATE_TOP_RATIO = 0.27             # Analyze top 27% for duplicate detection
@@ -28,7 +28,7 @@ class Config:
     
     # ---- A/B Merging Parameters ----
     B_CAPTURE_DELAY = 3.0                  # Seconds delay for B screenshot capture
-    B_OVERLAY_WIDTH_RATIO = 0.20           # Use left 30% of B screenshot for overlay
+    B_OVERLAY_WIDTH_RATIO = 0.14           # Use left 30% of B screenshot for overlay
     
     # ---- Image Processing Thresholds ----
     PIXEL_INTENSITY_THRESHOLD = 30         # Intensity threshold for binary diff
