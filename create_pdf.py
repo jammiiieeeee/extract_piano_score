@@ -56,22 +56,22 @@ def stack_images_vertically(images):
     stacked = np.vstack(resized_images)
     return stacked
 
-def fit_image_to_a4(image, a4_width, a4_height, margin=50, title_space=0):
+def fit_image_to_a4(image, a4_width, a4_height, margin=60, title_space=0):
     """
-    Resize image to fit A4 page with margins.
+    Resize image to fit A4 page with margins and top alignment.
     
     Args:
         image: OpenCV image
         a4_width: A4 width in pixels
         a4_height: A4 height in pixels
-        margin: Margin in pixels
+        margin: Margin in pixels (increased default for better borders)
         title_space: Extra space reserved for title (pixels)
     
     Returns:
         Resized image that fits A4
     """
     available_width = a4_width - 2 * margin
-    available_height = a4_height - 2 * margin - title_space
+    available_height = a4_height - margin - title_space  # Only subtract margin from top, strips align to top
     
     height, width = image.shape[:2]
     
@@ -145,7 +145,7 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
             if stacked_image is not None:
                 page_count += 1
                 is_first_page = (page_count == 1)
-                title_space_pixels = 120 if (is_first_page and song_title) else 0  # Reserve space for title
+                title_space_pixels = 60 if (is_first_page and song_title) else 0  # Reserve space for title
                 
                 # Fit to A4 size (account for title space on first page)
                 fitted_image = fit_image_to_a4(stacked_image, a4_width, a4_height, title_space=title_space_pixels)
@@ -166,24 +166,30 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
                     # Set font and size for title
                     c.setFont("Helvetica-Bold", 24)
                     
-                    # Calculate title position (centered horizontally, with top padding)
-                    title_width = c.stringWidth(song_title, "Helvetica-Bold", 24)
+                    # Convert title to title case for display (capitalize first letter of each word)
+                    display_title = song_title.title()
+                    
+                    # Calculate title position (centered horizontally, with consistent top margin)
+                    title_width = c.stringWidth(display_title, "Helvetica-Bold", 24)
                     title_x = (A4[0] - title_width) / 2
-                    title_y = A4[1] - 60  # 60 points from top (about 0.83 inches)
+                    title_y = A4[1] - 40  # 40 points from top (about 0.56 inches) for title
                     
                     # Draw title
-                    c.drawString(title_x, title_y, song_title)
+                    c.drawString(title_x, title_y, display_title)
                 
-                # Calculate position to center the image (adjust for title on first page)
+                # Calculate position to align to top with margin (adjust for title on first page)
                 img_width, img_height = fitted_image.shape[1], fitted_image.shape[0]
-                x = (A4[0] - img_width * 72/300) / 2  # Convert pixels to points
+                x = (A4[0] - img_width * 72/300) / 2  # Center horizontally, convert pixels to points
+                
+                # Set top margin (border from top edge)
+                top_margin = 60  # 60 points from top (about 0.83 inches)
                 
                 if is_first_page and song_title:
-                    # Position image below title with padding
-                    y = A4[1] - 100 - (img_height * 72/300)  # 100 points from top to account for title
+                    # Position image below title with minimal padding
+                    y = A4[1] - 60 - (img_height * 72/300)  # 60 points from top to account for title + margin
                 else:
-                    # Center vertically
-                    y = (A4[1] - img_height * 72/300) / 2
+                    # Align to top with margin
+                    y = A4[1] - top_margin - (img_height * 72/300)
                 
                 c.drawImage(ImageReader(img_buffer), x, y, 
                            width=img_width * 72/300, height=img_height * 72/300)

@@ -29,7 +29,7 @@ class Config:
     
     # ---- A/B Merging Parameters ----
     B_CAPTURE_DELAY = 3.0                  # Seconds delay for B screenshot capture
-    B_OVERLAY_WIDTH_RATIO = 0.14           # Use left 30% of B screenshot for overlay
+    B_OVERLAY_WIDTH_RATIO = 0.20           # Use left 20% of B screenshot for overlay
     
     # ---- Image Processing Thresholds ----
     PIXEL_INTENSITY_THRESHOLD = 30         # Intensity threshold for binary diff

@@ -1,7 +1,63 @@
+# Generated video processing results
+*/
+!*.py
+!*.md
+!*.txt
+!*.json
+!*.yml
+!*.yaml
+!.gitignore
+!requirements.txt
+
+# Video files
 *.webm
-*.pdf
-*.jpg
-*.txt
-*.png
-*.jpeg
 *.mp4
+*.avi
+*.mov
+*.mkv
+
+# Generated PDFs
+*.pdf
+
+# Generated screenshots and images
+*.jpg
+*.jpeg
+*.png
+
+# Generated HTML reports
+*.html
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+temp_*
+test_*

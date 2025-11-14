@@ -207,3 +207,117 @@ MERGED: 22_03m39s_A.jpg + 22_03m41s_B.jpg -> 22_22_03m39s_merged.jpg
 === MERGING COMPLETE ===
 Successfully merged: 14 screenshots
 
+
+=== ADVANCED DUPLICATE DETECTION ===
+Screenshots to analyze: 26
+Analysis region: Top 27.0% of each image
+Test 1: 95.0% pixel similarity threshold
+Test 2: 94.0% row similarity (98.0% threshold per row)
+
+DUPLICATE: 02_00m24s_A.jpg vs 10_01m52s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_001
+
+DUPLICATE: 04_00m47s_A.jpg vs 11_02m05s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_002
+
+DUPLICATE: 04_00m47s_A.jpg vs 17_02m54s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_003
+
+DUPLICATE: 05_00m59s_A.jpg vs 12_02m17s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_004
+
+DUPLICATE: 05_00m59s_A.jpg vs 18_03m04s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_005
+
+DUPLICATE: 06_01m11s_A.jpg vs 13_02m29s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_006
+
+DUPLICATE: 06_01m11s_A.jpg vs 19_03m16s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_007
+
+DUPLICATE: 09_01m46s_A.jpg vs 14_02m39s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_008
+
+DUPLICATE: 11_02m05s_A.jpg vs 17_02m54s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_009
+
+DUPLICATE: 12_02m17s_A.jpg vs 18_03m04s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_010
+
+DUPLICATE: 13_02m29s_A.jpg vs 19_03m16s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_011
+
+DUPLICATE: 16_02m50s_A.jpg vs 20_03m23s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_012
+
+DUPLICATE: 21_03m29s_A.jpg vs 23_03m49s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_013
+
+DUPLICATE: 22_03m39s_A.jpg vs 24_03m55s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_014
+
+DUPLICATE: 22_03m39s_A.jpg vs 25_04m06s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_015
+
+DUPLICATE: 24_03m55s_A.jpg vs 25_04m06s_A.jpg
+  Test 1 (pixel): FAIL
+  Test 2 (row): PASS
+  Saved as: duplicate_pair_016
+
+=== DUPLICATE DETECTION COMPLETE ===
+Total duplicates found: 16 pairs
+
+=== MERGING UNIQUE A+B SCREENSHOTS ===
+Total A screenshots: 26
+Duplicate pairs found: 16
+Later duplicate indices: [10, 11, 12, 13, 14, 17, 18, 19, 20, 23, 24, 25]
+Unique A screenshots to merge: 14
+
+MERGED: 00_00m02s_A.jpg + 00_00m04s_B.jpg -> 00_00_00m02s_merged.jpg
+MERGED: 01_00m12s_A.jpg + 01_00m14s_B.jpg -> 01_01_00m12s_merged.jpg
+MERGED: 02_00m24s_A.jpg + 02_00m26s_B.jpg -> 02_02_00m24s_merged.jpg
+MERGED: 03_00m36s_A.jpg + 03_00m38s_B.jpg -> 03_03_00m36s_merged.jpg
+MERGED: 04_00m47s_A.jpg + 04_00m49s_B.jpg -> 04_04_00m47s_merged.jpg
+MERGED: 05_00m59s_A.jpg + 05_01m01s_B.jpg -> 05_05_00m59s_merged.jpg
+MERGED: 06_01m11s_A.jpg + 06_01m13s_B.jpg -> 06_06_01m11s_merged.jpg
+MERGED: 07_01m23s_A.jpg + 07_01m25s_B.jpg -> 07_07_01m23s_merged.jpg
+MERGED: 08_01m34s_A.jpg + 08_01m36s_B.jpg -> 08_08_01m34s_merged.jpg
+MERGED: 09_01m46s_A.jpg + 09_01m48s_B.jpg -> 09_09_01m46s_merged.jpg
+MERGED: 15_02m43s_A.jpg + 15_02m45s_B.jpg -> 15_15_02m43s_merged.jpg
+MERGED: 16_02m50s_A.jpg + 16_02m52s_B.jpg -> 16_16_02m50s_merged.jpg
+MERGED: 21_03m29s_A.jpg + 21_03m31s_B.jpg -> 21_21_03m29s_merged.jpg
+MERGED: 22_03m39s_A.jpg + 22_03m41s_B.jpg -> 22_22_03m39s_merged.jpg
+
+=== MERGING COMPLETE ===
+Successfully merged: 14 screenshots
+
