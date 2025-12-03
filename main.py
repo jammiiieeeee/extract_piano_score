@@ -44,37 +44,47 @@ class Config:
 def sanitize_filename(filename):
     """
     Sanitize filename by removing or replacing problematic characters.
+    Preserves international characters like Japanese, Chinese, etc.
     """
     # Replace problematic characters with safe alternatives
     replacements = {
+        # Windows reserved characters
+        '<': '',
+        '>': '',
+        ':': '_',
+        '"': '',
+        '/': '_',
+        '\\': '_',
+        '|': '_',
+        '?': '',
+        '*': '',
+        # Specific replacements for brackets and other characters
         '『': '[',
-        '』': ']', 
-        '／': '_',
+        '』': ']',
         '：': '_',
         '？': '',
         '＜': '',
         '＞': '',
         '｜': '_',
         '＊': '',
-        '"': '',
-        "'": '',
-        '\u3000': '_',  # Full-width space
+        # Full-width space to regular space or underscore
+        '\u3000': ' ',
     }
-    
+
     # Apply replacements
     for old, new in replacements.items():
         filename = filename.replace(old, new)
-    
-    # Remove any remaining problematic characters using regex
-    # Keep only alphanumeric, spaces, hyphens, underscores, periods, and brackets
-    filename = re.sub(r'[^\w\s\-_.\[\]()]', '', filename)
-    
-    # Replace multiple spaces/underscores with single underscore
+
+    # Remove or replace control characters and other problematic Unicode
+    # Keep letters, numbers, spaces, hyphens, underscores, periods, parentheses, brackets, and Unicode letters
+    filename = re.sub(r'[^\w\s\-.()\[\]~]', '_', filename)
+
+    # Replace multiple consecutive spaces/underscores with single underscore
     filename = re.sub(r'[\s_]+', '_', filename)
-    
-    # Remove leading/trailing underscores and spaces
-    filename = filename.strip('_ ')
-    
+
+    # Remove leading/trailing underscores, spaces, and periods
+    filename = filename.strip('_ .')
+
     return filename
 
 def detect_frame_change(frame1, frame2, top_ratio=None, threshold=None):
@@ -142,22 +152,28 @@ def extract_screenshots(video_path, start_time=2, interval=12, detection_method=
         print(f"Error: Video file '{video_path}' not found.")
         return False
     
-    # Get video filename without extension and sanitize it
+    # Get video filename without extension
     video_name = Path(video_path).stem
-    sanitized_name = sanitize_filename(video_name)
-    
-    print(f"Original filename: {video_name}")
-    print(f"Sanitized filename: {sanitized_name}")
-    
-    # Create organized folder structure:
-    # [video_name]/
+
+    # Get the original video name for potential use (preserving Unicode)
+    original_video_name = video_name
+
+    # Create a temporary folder name with timestamp for processing
+    import time
+    temp_folder_name = f"temp_{int(time.time())}_{os.getpid()}"
+
+    print(f"Original filename: {original_video_name}")
+    print(f"Temporary folder name: {temp_folder_name}")
+
+    # Create organized folder structure using temp folder name:
+    # [temp_folder_name]/
     #   ├── screenshots/
     #   │   ├── raw/           # All A and B screenshots
     #   │   ├── result/        # Merged unique A+B screenshots
     #   │   └── duplicate/     # Duplicate pairs
-    #   ├── [video_name]_log.txt
-    #   └── [video_name]_similarity_heatmap.html
-    main_folder = os.path.join(os.getcwd(), sanitized_name)
+    #   ├── [temp_folder_name]_log.txt
+    #   └── [temp_folder_name]_similarity_heatmap.html
+    main_folder = os.path.join(os.getcwd(), temp_folder_name)
     screenshots_dir = os.path.join(main_folder, "screenshots")
     raw_dir = os.path.join(screenshots_dir, "raw")
     result_dir = os.path.join(screenshots_dir, "result")
@@ -192,57 +208,172 @@ def extract_screenshots(video_path, start_time=2, interval=12, detection_method=
         os.makedirs(result_dir, exist_ok=True)
         os.makedirs(duplicate_dir, exist_ok=True)
     
-    # Open video capture
-    cap = cv2.VideoCapture(video_path)
-    
+    # Initialize temp video path variable
+    temp_video_exists = False
+
+    # Open video capture - handle Unicode filenames properly on Windows
+    # Create a temporary copy with ASCII name to work around OpenCV limitations on Windows
+    import sys
+    if sys.platform.startswith('win'):
+        # On Windows, if the path contains non-ASCII characters, use a temporary copy
+        import tempfile
+        import shutil
+        if any(ord(c) > 127 for c in video_path):
+            # Contains non-ASCII characters, make a temp copy
+            temp_video_path = os.path.join(tempfile.gettempdir(), f"temp_video_{os.getpid()}.mp4")
+            # Copy the file to temporary location with ASCII name
+            shutil.copy2(video_path, temp_video_path)
+            # Open the temp file
+            cap = cv2.VideoCapture(temp_video_path)
+            # Mark that we created a temp file for later cleanup
+            temp_video_exists = True
+        else:
+            # No non-ASCII characters, open directly
+            cap = cv2.VideoCapture(video_path)
+    else:
+        # On non-Windows systems, open directly
+        cap = cv2.VideoCapture(video_path)
+
     if not cap.isOpened():
         print(f"Error: Could not open video file '{video_path}'")
         return False
-    
+
     # Get video properties
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     duration = total_frames / fps
-    
+
     print(f"Video duration: {duration:.2f} seconds")
     print(f"Video FPS: {fps:.2f}")
     print(f"Total frames: {total_frames}")
     print(f"Screenshots will be saved to: {screenshots_dir}")
-    
+
     # Check if we got valid video properties
     if fps <= 0 or total_frames <= 0:
         print("Error: Could not read video properties. The file might be corrupted or in an unsupported format.")
         cap.release()
+        # Cleanup temp file if it exists
+        if temp_video_exists and 'temp_video_path' in locals() and os.path.exists(temp_video_path):
+            try:
+                os.remove(temp_video_path)
+            except:
+                pass  # Ignore cleanup errors
         return False
     
     if duration <= start_time:
         print(f"Error: Video duration ({duration:.2f}s) is shorter than start time ({start_time}s)")
         cap.release()
+        # Cleanup temp file if it exists
+        if temp_video_exists and 'temp_video_path' in locals() and os.path.exists(temp_video_path):
+            try:
+                os.remove(temp_video_path)
+            except:
+                pass  # Ignore cleanup errors
         return False
     
     screenshot_count = 0
     
-    # Create log file
-    log_filename = f"{sanitized_name}_log.txt"
+    # Create log file using temp folder name
+    log_filename = f"{temp_folder_name}_log.txt"
     log_path = os.path.join(main_folder, log_filename)
     
     if should_capture:
         print(f"Using {detection_method}-based method for A/B screenshot capture")
         if detection_method == 'time':
             print(f"Screenshots every {interval} seconds starting at {start_time}s")
-            success = _extract_ab_time_based(cap, fps, duration, start_time, interval, raw_dir, log_path, sanitized_name)
+            success = _extract_ab_time_based(cap, fps, duration, start_time, interval, raw_dir, log_path, temp_folder_name)
         else:
             print(f"Detecting {change_threshold*100}% change in top 20% of frame")
-            success = _extract_ab_change_based(cap, fps, duration, start_time, change_threshold, raw_dir, log_path, sanitized_name)
+            success = _extract_ab_change_based(cap, fps, duration, start_time, change_threshold, raw_dir, log_path, temp_folder_name)
         
-        cap.release()
-        
+        # Release video capture and clean up temp file if needed
+        try:
+            cap.release()
+        except:
+            pass  # Already released or was never opened
+
+        # Cleanup temp file if it exists
+        if 'temp_video_exists' in locals() and temp_video_exists and 'temp_video_path' in locals() and os.path.exists(temp_video_path):
+            try:
+                os.remove(temp_video_path)
+            except:
+                pass  # Ignore cleanup errors
+
         if not success:
             return False
     
     # Always run duplicate detection and processing steps
     print("\n=== PROCESSING EXISTING SCREENSHOTS ===")
-    return _process_screenshots(main_folder, raw_dir, result_dir, duplicate_dir, sanitized_name)
+    result = _process_screenshots(main_folder, raw_dir, result_dir, duplicate_dir, temp_folder_name, original_video_name)
+
+    # Release video capture and clean up temp video file if needed
+    try:
+        cap.release()
+    except:
+        pass  # Already released or was never opened
+
+    # Cleanup temp video file if it exists
+    if 'temp_video_exists' in locals() and temp_video_exists and 'temp_video_path' in locals() and os.path.exists(temp_video_path):
+        try:
+            os.remove(temp_video_path)
+        except:
+            pass  # Ignore cleanup errors
+
+    # After processing is complete, rename temp folder to use sanitized original name
+    sanitized_folder_name = sanitize_filename(original_video_name)
+    final_folder_path = os.path.join(os.getcwd(), sanitized_folder_name)
+
+    if main_folder != final_folder_path:
+        # Rename temp folder to final folder name
+        if os.path.exists(final_folder_path):
+            # If final folder already exists, remove it first
+            import shutil
+            shutil.rmtree(final_folder_path)
+
+        # Rename the temp folder to the sanitized name
+        os.rename(main_folder, final_folder_path)
+
+        print(f"Renamed temporary folder to final folder: {sanitized_folder_name}")
+
+        # Update the result directory path to point to the renamed folder
+        result_dir = os.path.join(final_folder_path, "screenshots", "result")
+
+        # Rename the log, frame changes, and heatmap files to use original name
+        # Find and rename files that were created with temp_folder_name
+        log_old_path = os.path.join(final_folder_path, f"{temp_folder_name}_log.txt")
+        log_new_path = os.path.join(final_folder_path, f"{sanitized_folder_name}_log.txt")
+
+        frame_change_old_path = os.path.join(final_folder_path, f"{temp_folder_name}_frame_changes.txt")
+        frame_change_new_path = os.path.join(final_folder_path, f"{sanitized_folder_name}_frame_changes.txt")
+
+        heatmap_old_path = os.path.join(final_folder_path, f"{temp_folder_name}_similarity_heatmap.html")
+        heatmap_new_path = os.path.join(final_folder_path, f"{sanitized_folder_name}_similarity_heatmap.html")
+
+        # Rename log file
+        if os.path.exists(log_old_path) and log_old_path != log_new_path:
+            try:
+                os.rename(log_old_path, log_new_path)
+                print(f"Renamed log file to: {os.path.basename(log_new_path)}")
+            except OSError:
+                pass  # If rename fails, keep original name
+
+        # Rename frame changes file
+        if os.path.exists(frame_change_old_path) and frame_change_old_path != frame_change_new_path:
+            try:
+                os.rename(frame_change_old_path, frame_change_new_path)
+                print(f"Renamed frame changes file to: {os.path.basename(frame_change_new_path)}")
+            except OSError:
+                pass  # If rename fails, keep original name
+
+        # Rename heatmap file
+        if os.path.exists(heatmap_old_path) and heatmap_old_path != heatmap_new_path:
+            try:
+                os.rename(heatmap_old_path, heatmap_new_path)
+                print(f"Renamed heatmap file to: {os.path.basename(heatmap_new_path)}")
+            except OSError:
+                pass  # If rename fails, keep original name
+
+    return True, result_dir
 
 def _extract_ab_time_based(cap, fps, duration, start_time, interval, raw_dir, log_path, sanitized_name):
     """Extract A/B screenshots at fixed time intervals with 2-second B delay"""
@@ -479,29 +610,32 @@ def format_time(seconds):
     secs = int(seconds % 60)
     return f"{minutes:02d}m{secs:02d}s"
 
-def _process_screenshots(main_folder, raw_dir, result_dir, duplicate_dir, sanitized_name):
+def _process_screenshots(main_folder, raw_dir, result_dir, duplicate_dir, sanitized_name, original_video_name=None):
     """Process screenshots: duplicate detection -> merging -> heatmap generation"""
-    
+
+    # Use original name if available, otherwise fallback to sanitized (for display purposes)
+    display_name = original_video_name if original_video_name else sanitized_name
+
     log_path = os.path.join(main_folder, f"{sanitized_name}_log.txt")
-    
+
     print("=== DUPLICATE DETECTION ===")
     # Step 1: Duplicate detection on A screenshots only
     duplicates = detect_duplicates_advanced(raw_dir, duplicate_dir, log_path)
-    
+
     print("=== MERGING UNIQUE SCREENSHOTS ===")
     # Step 2: Merge unique A screenshots with their B counterparts
     merge_results = merge_unique_ab_screenshots(raw_dir, result_dir, duplicates, log_path)
-    
+
     print("=== GENERATING SIMILARITY HEATMAPS ===")
     # Step 3: Generate similarity heatmaps
     heatmap_path = os.path.join(main_folder, f"{sanitized_name}_similarity_heatmap.html")
-    generate_triple_heatmap(raw_dir, duplicates, heatmap_path, sanitized_name)
-    
+    generate_triple_heatmap(raw_dir, duplicates, heatmap_path, display_name)
+
     print(f"✓ Processing complete!")
     print(f"  - Duplicates detected: {len(duplicates)} pairs")
     print(f"  - Unique screenshots merged: {merge_results}")
     print(f"  - Heatmap saved: {heatmap_path}")
-    
+
     return True, result_dir
 
 def detect_duplicates_advanced(raw_dir, duplicate_dir, log_path):
@@ -1844,22 +1978,27 @@ def main():
     
     # Extract screenshots
     result = extract_screenshots(
-        args.video_path, 
-        args.start, 
-        args.interval, 
-        args.method, 
+        args.video_path,
+        args.start,
+        args.interval,
+        args.method,
         args.change_threshold,
         args.recapture
     )
-    
+
     if isinstance(result, tuple):
         success, screenshots_dir = result
+        # Extract folder name from the screenshots_dir path to get the sanitized video name
+        main_folder = os.path.dirname(screenshots_dir)  # This is the main folder with sanitized name
+        original_video_name = Path(args.video_path).stem  # Store original for PDF title
     else:
         success = result
         # Fallback to old structure if needed
         video_name = Path(args.video_path).stem
+        original_video_name = video_name  # Store original for PDF title
         sanitized_name = sanitize_filename(video_name)
-        screenshots_dir = os.path.join(os.getcwd(), f"{sanitized_name}_screenshots")
+        main_folder = os.path.join(os.getcwd(), sanitized_name)
+        screenshots_dir = os.path.join(main_folder, "screenshots")
     
     if not success:
         sys.exit(1)
@@ -1870,11 +2009,11 @@ def main():
         video_name = Path(args.video_path).stem
         sanitized_name = sanitize_filename(video_name)
         main_folder = os.path.join(os.getcwd(), sanitized_name)
-        
+
         # Prefer result folder (merged screenshots) if it exists, otherwise use main screenshots folder
         result_dir = os.path.join(main_folder, "screenshots", "result")
         screenshots_dir = os.path.join(main_folder, "screenshots")
-        
+
         if os.path.exists(result_dir) and len(os.listdir(result_dir)) > 0:
             pdf_source_dir = result_dir
             print(f"Using merged screenshots from: {result_dir}")
@@ -1884,7 +2023,7 @@ def main():
         else:
             print(f"✗ No screenshots found in {screenshots_dir}")
             return
-        
+
         if os.path.exists(pdf_source_dir):
             # Import create_pdf function directly instead of subprocess
             try:
@@ -1894,58 +2033,59 @@ def main():
                 if spec is not None and spec.loader is not None:
                     create_pdf_module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(create_pdf_module)
-                    
+
                     pdf_filename = f"{sanitized_name}_score.pdf"
                     pdf_path = os.path.join(main_folder, pdf_filename)
-                    
+
                     print(f"Creating PDF: {pdf_path}")
                     success = create_pdf_module.create_pdf_from_screenshots(
                         pdf_source_dir,  # Use the selected source directory
-                        pdf_path, 
-                        args.crop_ratio, 
+                        pdf_path,
+                        args.crop_ratio,
                         args.strips_per_page,
-                        sanitized_name  # Pass song title
+                        original_video_name  # Pass original song title (preserving Unicode)
                     )
-                    
+
                     if success:
                         print(f"✓ PDF created successfully: {pdf_path}")
                     else:
                         print(f"✗ PDF creation failed")
                 else:
                     raise Exception("Could not load create_pdf module")
-                    
+
             except Exception as e:
                 print(f"✗ Error creating PDF: {e}")
                 print("Trying alternative subprocess method...")
-                
+
                 # Fallback to subprocess with proper encoding
                 try:
                     import subprocess
                     pdf_filename = f"{sanitized_name}_stacked.pdf"
-                    
+
                     # Run the PDF creation script with proper encoding
                     cmd = [
-                        sys.executable, "create_pdf.py", pdf_source_dir, 
+                        sys.executable, "create_pdf.py", pdf_source_dir,
                         "--output", pdf_filename,
                         "--crop-ratio", str(args.crop_ratio),
-                        "--strips-per-page", str(args.strips_per_page)
+                        "--strips-per-page", str(args.strips_per_page),
+                        "--title", original_video_name  # Pass original title with Unicode
                     ]
-                    
+
                     result = subprocess.run(
-                        cmd, 
-                        capture_output=True, 
-                        text=True, 
+                        cmd,
+                        capture_output=True,
+                        text=True,
                         cwd=os.getcwd(),
                         encoding='utf-8',
                         errors='replace'
                     )
-                    
+
                     if result.returncode == 0:
                         print(f"✓ PDF created successfully: {pdf_filename}")
                     else:
                         print(f"✗ PDF creation failed:")
                         print(result.stderr)
-                        
+
                 except Exception as e2:
                     print(f"✗ Both PDF creation methods failed: {e2}")
         else:

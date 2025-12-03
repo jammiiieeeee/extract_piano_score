@@ -127,8 +127,19 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
     for i, screenshot_file in enumerate(screenshot_files):
         print(f"Processing {screenshot_file.name}...")
         
-        # Load image
-        image = cv2.imread(str(screenshot_file))
+        # Load image - handle Unicode filenames properly
+        try:
+            # Method 1: Direct string path (works in many cases with recent OpenCV versions)
+            image = cv2.imread(str(screenshot_file))
+            if image is None:
+                # Method 2: Use numpy fromfile to handle Unicode properly
+                import numpy as np
+                img_array = np.fromfile(str(screenshot_file), dtype=np.uint8)
+                image = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        except Exception as e:
+            print(f"Warning: Could not load {screenshot_file} - {e}")
+            continue
+
         if image is None:
             print(f"Warning: Could not load {screenshot_file}")
             continue
@@ -165,15 +176,21 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
                 if is_first_page and song_title:
                     # Set font and size for title
                     c.setFont("Helvetica-Bold", 24)
-                    
-                    # Convert title to title case for display (capitalize first letter of each word)
-                    display_title = song_title.title()
-                    
+
+                    # Use the original title with international characters
+                    display_title = song_title  # Don't use .title() which can break international characters
+
                     # Calculate title position (centered horizontally, with consistent top margin)
-                    title_width = c.stringWidth(display_title, "Helvetica-Bold", 24)
-                    title_x = (A4[0] - title_width) / 2
+                    # Handle potential encoding issues with international characters
+                    try:
+                        title_width = c.stringWidth(display_title, "Helvetica-Bold", 24)
+                        title_x = (A4[0] - title_width) / 2
+                    except:
+                        # Fallback if string width calculation fails
+                        title_x = 100  # Default margin
+
                     title_y = A4[1] - 40  # 40 points from top (about 0.56 inches) for title
-                    
+
                     # Draw title
                     c.drawString(title_x, title_y, display_title)
                 
