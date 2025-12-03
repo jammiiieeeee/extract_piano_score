@@ -6,6 +6,9 @@ import re
 import numpy as np
 import json
 from pathlib import Path
+import tempfile
+import subprocess
+import time
 
 # ===== CONFIGURATION THRESHOLDS =====
 # All configurable thresholds grouped for easy access and modification
@@ -1916,9 +1919,51 @@ def _merge_b_to_a_screenshots(screenshots_dir, log_path):
     
     print(f"Merged {merged_count} screenshots and deleted {deleted_count} B screenshots")
 
+def download_youtube_video(url, output_path):
+    """
+    Download YouTube video with highest quality available using yt-dlp.
+    """
+    try:
+        # Try to use yt-dlp first (more up-to-date)
+        result = subprocess.run([
+            'yt-dlp',
+            '-f', 'best[ext=mp4][height<=1080]/best[ext=mp4]/best',
+            '-o', output_path,
+            '--no-playlist',
+            url
+        ], capture_output=True, text=True)
+
+        if result.returncode == 0:
+            return True, output_path
+        else:
+            print(f"yt-dlp failed: {result.stderr}")
+    except FileNotFoundError:
+        print("yt-dlp not found, trying youtube-dl...")
+        try:
+            # Fallback to youtube-dl
+            result = subprocess.run([
+                'youtube-dl',
+                '-f', 'best[ext=mp4][height<=1080]/best[ext=mp4]/best',
+                '-o', output_path,
+                '--no-playlist',
+                url
+            ], capture_output=True, text=True)
+
+            if result.returncode == 0:
+                return True, output_path
+            else:
+                print(f"youtube-dl failed: {result.stderr}")
+        except FileNotFoundError:
+            print("Neither yt-dlp nor youtube-dl found. Please install one of them.")
+            print("To install yt-dlp: pip install yt-dlp")
+            print("To install youtube-dl: pip install youtube-dl")
+
+    return False, None
+
 def main():
     parser = argparse.ArgumentParser(description="Extract screenshots from video files at regular intervals or based on content changes")
-    parser.add_argument("video_path", help="Path to the video file")
+    parser.add_argument("video_path", nargs='?', help="Path to the video file (or use --url for YouTube)")
+    parser.add_argument("--url", help="YouTube video URL to download and process")
     parser.add_argument("--start", type=float, default=2, help="Starting time in seconds (default: 2)")
     parser.add_argument("--interval", type=float, default=12, help="Interval between screenshots in seconds for time-based method (default: 12)")
     parser.add_argument("--method", choices=['time', 'change'], default='change', help="Screenshot method: 'time' for fixed intervals, 'change' for content change detection (default: change)")
@@ -1928,30 +1973,70 @@ def main():
     parser.add_argument("--crop-ratio", type=float, default=0.32, help="Portion of height to keep from top for PDF (default: 0.32)")
     parser.add_argument("--strips-per-page", type=int, default=6, help="Maximum strips per A4 page (default: 6)")
     parser.add_argument("--recapture", action="store_true", help="Force recapture of screenshots, replacing existing raw folder")
+    parser.add_argument("--title", help="Custom title for PDF (defaults to video filename)")
     
     args = parser.parse_args()
-    
-    # Check if file exists first
-    if not os.path.exists(args.video_path):
-        print(f"Error: File '{args.video_path}' does not exist.")
-        print("Please check the file path and try again.")
+
+    # Handle YouTube URL download or file input
+    video_path = args.video_path
+    temp_video_path = None
+
+    if args.url:
+        # YouTube URL provided, download the video first
+        if not args.video_path:
+            # Generate a filename based on URL or use a temporary name
+            import re
+            # Extract video ID from YouTube URL
+            video_id_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', args.url)
+            if video_id_match:
+                video_id = video_id_match.group(1)
+                temp_video_path = os.path.join(tempfile.gettempdir(), f"youtube_temp_{video_id}.mp4")
+            else:
+                # If can't extract ID, use timestamp
+                temp_video_path = os.path.join(tempfile.gettempdir(), f"youtube_temp_{int(time.time())}.mp4")
+        else:
+            # User specified output filename
+            temp_video_path = args.video_path
+
+        print(f"Downloading YouTube video from: {args.url}")
+        print(f"Saving to: {temp_video_path}")
+
+        success, downloaded_path = download_youtube_video(args.url, temp_video_path)
+
+        if not success:
+            print("Failed to download YouTube video.")
+            sys.exit(1)
+
+        video_path = downloaded_path
+        print(f"Downloaded YouTube video successfully: {downloaded_path}")
+    elif not args.video_path:
+        # No video path or URL provided
+        print("Error: Either provide a video file path or use --url for YouTube.")
+        parser.print_help()
         sys.exit(1)
+    else:
+        # Regular file path provided
+        if not os.path.exists(args.video_path):
+            print(f"Error: File '{args.video_path}' does not exist.")
+            print("Please check the file path and try again.")
+            sys.exit(1)
+        video_path = args.video_path
     
     # Check file size
-    file_size = os.path.getsize(args.video_path)
+    file_size = os.path.getsize(video_path)
     print(f"File size: {file_size:,} bytes ({file_size / (1024*1024):.2f} MB)")
     
     # Validate video file extension
-    if not args.video_path.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')):
+    if not video_path.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')):
         print("Warning: File doesn't appear to be a video file. Supported formats: .mp4, .avi, .mov, .mkv, .webm")
     
     if args.test:
         # Test mode: just check if we can open the video and read its properties
         print("=== TEST MODE ===")
-        
-        cap = cv2.VideoCapture(args.video_path)
+
+        cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
-            print(f"Error: Could not open video file '{args.video_path}'")
+            print(f"Error: Could not open video file '{video_path}'")
             sys.exit(1)
         
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -1978,7 +2063,7 @@ def main():
     
     # Extract screenshots
     result = extract_screenshots(
-        args.video_path,
+        video_path,
         args.start,
         args.interval,
         args.method,
@@ -1990,13 +2075,51 @@ def main():
         success, screenshots_dir = result
         # Extract folder name from the screenshots_dir path to get the sanitized video name
         main_folder = os.path.dirname(screenshots_dir)  # This is the main folder with sanitized name
-        original_video_name = Path(args.video_path).stem  # Store original for PDF title
+
+        # Determine the appropriate video name based on source
+        if args.url:
+            # For YouTube URLs, create a reasonable filename from URL info or use the downloaded filename
+            import re
+            video_id_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', args.url)
+            if video_id_match:
+                video_id = video_id_match.group(1)
+                video_name = f"youtube_{video_id}"
+            else:
+                video_name = Path(video_path).stem  # Use the downloaded file stem
+        else:
+            video_name = Path(video_path).stem  # Get the actual video file path, not the original arg
+
+        # Use custom title if provided, otherwise use appropriate video name
+        original_video_name = args.title if args.title else video_name
+
+        # Use custom title for PDF generation, but keep processing with original name
+        # The folder will be renamed to the custom title after PDF generation
+        if args.title:
+            pdf_title = args.title
+        else:
+            pdf_title = original_video_name
     else:
         success = result
-        # Fallback to old structure if needed
-        video_name = Path(args.video_path).stem
-        original_video_name = video_name  # Store original for PDF title
-        sanitized_name = sanitize_filename(video_name)
+        if not success:
+            # If extraction failed, exit
+            sys.exit(1)
+        # Fallback to old structure if needed (shouldn't normally happen if extract_screenshots returns tuple)
+        if args.url:
+            # For YouTube URLs, create a reasonable filename from URL info or use the downloaded filename
+            import re
+            video_id_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', args.url)
+            if video_id_match:
+                video_id = video_id_match.group(1)
+                original_video_name = f"youtube_{video_id}"
+            else:
+                original_video_name = Path(video_path).stem  # Use the downloaded file stem
+        else:
+            original_video_name = Path(video_path).stem  # Get the actual video file path, not the original arg
+
+        # Use custom title for PDF generation, but keep processing with original name
+        pdf_title = args.title if args.title else original_video_name
+        # Use the original name for internal processing
+        sanitized_name = sanitize_filename(original_video_name)
         main_folder = os.path.join(os.getcwd(), sanitized_name)
         screenshots_dir = os.path.join(main_folder, "screenshots")
     
@@ -2006,22 +2129,29 @@ def main():
     # Create PDF if requested
     if args.create_pdf:
         print("\n=== CREATING PDF ===")
-        video_name = Path(args.video_path).stem
-        sanitized_name = sanitize_filename(video_name)
-        main_folder = os.path.join(os.getcwd(), sanitized_name)
+        # Use the already determined folder path for PDF creation
+        # The main_folder was already set based on the processed video
+        # and potentially renamed if a custom title was provided
 
-        # Prefer result folder (merged screenshots) if it exists, otherwise use main screenshots folder
-        result_dir = os.path.join(main_folder, "screenshots", "result")
-        screenshots_dir = os.path.join(main_folder, "screenshots")
+        # screenshots_dir comes from extract_screenshots return value which is result_dir
+        # So screenshots_dir points to the 'result' subdirectory
+        # We need to get the parent 'screenshots' directory to access raw and duplicate subdirectories
+        actual_screenshots_dir = os.path.dirname(screenshots_dir)  # This should be the main 'screenshots' dir
+        result_dir = screenshots_dir  # screenshots_dir is already the result directory
+        raw_dir = os.path.join(actual_screenshots_dir, "raw")
+        duplicate_dir = os.path.join(actual_screenshots_dir, "duplicate")
 
         if os.path.exists(result_dir) and len(os.listdir(result_dir)) > 0:
             pdf_source_dir = result_dir
             print(f"Using merged screenshots from: {result_dir}")
-        elif os.path.exists(screenshots_dir):
-            pdf_source_dir = screenshots_dir
-            print(f"Using original screenshots from: {screenshots_dir}")
+        elif os.path.exists(raw_dir) and len(os.listdir(raw_dir)) > 0:
+            pdf_source_dir = raw_dir
+            print(f"Using raw screenshots from: {raw_dir}")
+        elif os.path.exists(duplicate_dir) and len(os.listdir(duplicate_dir)) > 0:
+            pdf_source_dir = duplicate_dir
+            print(f"Using duplicate screenshots from: {duplicate_dir}")
         else:
-            print(f"✗ No screenshots found in {screenshots_dir}")
+            print(f"✗ No screenshots found in {raw_dir}, {result_dir}, or {duplicate_dir}")
             return
 
         if os.path.exists(pdf_source_dir):
@@ -2034,7 +2164,9 @@ def main():
                     create_pdf_module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(create_pdf_module)
 
-                    pdf_filename = f"{sanitized_name}_score.pdf"
+                    # Use the actual folder name for PDF filename (which may have been renamed due to custom title)
+                    actual_folder_name = os.path.basename(main_folder)
+                    pdf_filename = f"{actual_folder_name}_score.pdf"
                     pdf_path = os.path.join(main_folder, pdf_filename)
 
                     print(f"Creating PDF: {pdf_path}")
@@ -2043,7 +2175,7 @@ def main():
                         pdf_path,
                         args.crop_ratio,
                         args.strips_per_page,
-                        original_video_name  # Pass original song title (preserving Unicode)
+                        pdf_title  # Pass PDF title (custom title or original video name)
                     )
 
                     if success:
@@ -2060,7 +2192,9 @@ def main():
                 # Fallback to subprocess with proper encoding
                 try:
                     import subprocess
-                    pdf_filename = f"{sanitized_name}_stacked.pdf"
+                    # Use the actual folder name for PDF filename (which may have been renamed due to custom title)
+                    actual_folder_name = os.path.basename(main_folder)
+                    pdf_filename = f"{actual_folder_name}_stacked.pdf"
 
                     # Run the PDF creation script with proper encoding
                     cmd = [
@@ -2068,7 +2202,7 @@ def main():
                         "--output", pdf_filename,
                         "--crop-ratio", str(args.crop_ratio),
                         "--strips-per-page", str(args.strips_per_page),
-                        "--title", original_video_name  # Pass original title with Unicode
+                        "--title", pdf_title  # Pass PDF title (custom title or original video name)
                     ]
 
                     result = subprocess.run(
@@ -2090,6 +2224,86 @@ def main():
                     print(f"✗ Both PDF creation methods failed: {e2}")
         else:
             print(f"✗ Screenshots directory not found: {screenshots_dir}")
+
+    # If a custom title was provided, rename the final folder after all processing including PDF generation
+    if args.title and 'main_folder' in locals() and main_folder:
+        sanitized_title = sanitize_filename(args.title)
+        old_main_folder = main_folder
+        new_main_folder = os.path.join(os.getcwd(), sanitized_title)
+
+        if old_main_folder != new_main_folder:
+            # Rename the folder to use the custom title after all processing
+            if os.path.exists(new_main_folder):
+                import shutil
+                shutil.rmtree(new_main_folder)  # Remove existing folder
+
+            os.rename(old_main_folder, new_main_folder)
+            print(f"Renamed final folder to use custom title: {sanitized_title}")
+
+            # Also rename files inside the folder to use the custom title
+            old_sanitized_name = os.path.basename(old_main_folder)  # Use the current folder name as base
+            old_log_path = os.path.join(new_main_folder, f"{old_sanitized_name}_log.txt")
+            new_log_path = os.path.join(new_main_folder, f"{sanitized_title}_log.txt")
+
+            old_frame_change_path = os.path.join(new_main_folder, f"{old_sanitized_name}_frame_changes.txt")
+            new_frame_change_path = os.path.join(new_main_folder, f"{sanitized_title}_frame_changes.txt")
+
+            old_heatmap_path = os.path.join(new_main_folder, f"{old_sanitized_name}_similarity_heatmap.html")
+            new_heatmap_path = os.path.join(new_main_folder, f"{sanitized_title}_similarity_heatmap.html")
+
+            # Note: PDF files might also need to be renamed, which have the old folder name in their filename
+            old_pdf_score_path = os.path.join(new_main_folder, f"{old_sanitized_name}_score.pdf")
+            new_pdf_score_path = os.path.join(new_main_folder, f"{sanitized_title}_score.pdf")
+
+            old_pdf_stacked_path = os.path.join(new_main_folder, f"{old_sanitized_name}_stacked.pdf")
+            new_pdf_stacked_path = os.path.join(new_main_folder, f"{sanitized_title}_stacked.pdf")
+
+            # Rename log file
+            if os.path.exists(old_log_path) and old_log_path != new_log_path:
+                try:
+                    os.rename(old_log_path, new_log_path)
+                    print(f"Renamed log file to: {os.path.basename(new_log_path)}")
+                except OSError:
+                    pass  # If rename fails, keep original name
+
+            # Rename frame changes file
+            if os.path.exists(old_frame_change_path) and old_frame_change_path != new_frame_change_path:
+                try:
+                    os.rename(old_frame_change_path, new_frame_change_path)
+                    print(f"Renamed frame changes file to: {os.path.basename(new_frame_change_path)}")
+                except OSError:
+                    pass  # If rename fails, keep original name
+
+            # Rename heatmap file
+            if os.path.exists(old_heatmap_path) and old_heatmap_path != new_heatmap_path:
+                try:
+                    os.rename(old_heatmap_path, new_heatmap_path)
+                    print(f"Renamed heatmap file to: {os.path.basename(new_heatmap_path)}")
+                except OSError:
+                    pass  # If rename fails, keep original name
+
+            # Rename PDF files to use custom title
+            if os.path.exists(old_pdf_score_path) and old_pdf_score_path != new_pdf_score_path:
+                try:
+                    os.rename(old_pdf_score_path, new_pdf_score_path)
+                    print(f"Renamed PDF file to: {os.path.basename(new_pdf_score_path)}")
+                except OSError:
+                    pass  # If rename fails, keep original name
+
+            if os.path.exists(old_pdf_stacked_path) and old_pdf_stacked_path != new_pdf_stacked_path:
+                try:
+                    os.rename(old_pdf_stacked_path, new_pdf_stacked_path)
+                    print(f"Renamed PDF file to: {os.path.basename(new_pdf_stacked_path)}")
+                except OSError:
+                    pass  # If rename fails, keep original name
+
+    # Clean up temporary YouTube video file if it was downloaded
+    if temp_video_path and args.url and os.path.exists(temp_video_path):
+        try:
+            os.remove(temp_video_path)
+            print(f"Cleaned up temporary YouTube video file: {temp_video_path}")
+        except Exception as e:
+            print(f"Warning: Could not remove temporary file {temp_video_path}: {e}")
 
 if __name__ == "__main__":
     main()
