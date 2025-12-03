@@ -456,6 +456,26 @@ def _extract_ab_time_based(cap, fps, duration, start_time, interval, raw_dir, lo
                         log_file.write(f"B{i:02d}: {b_time:.1f}s (between A{i:02d}@{a1_time:.1f}s and A{i+1:02d}@{a2_time:.1f}s) -> {b_filename}\n")
                     print(f"  B{i:02d} captured at {b_time:.1f}s (between A{i:02d} and A{i+1:02d})")
 
+    # Phase 3: Capture B screenshot for the last A screenshot (hardcoded offset)
+    if a_times:  # If we have at least one A screenshot
+        last_a_time = a_times[-1]  # Get the last A screenshot time
+        last_b_time = min(last_a_time + 2.0, duration - 1.0)  # B at +2s from last A, but not beyond video
+
+        if last_b_time < duration:  # Only capture if within video duration
+            frame_number = int(last_b_time * fps)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+            ret, frame = cap.read()
+
+            if ret:
+                b_filename = f"{len(a_times)-1:02d}_{format_time(last_b_time)}_B.jpg"
+                b_path = os.path.join(raw_dir, b_filename)
+
+                if cv2.imwrite(b_path, frame):
+                    b_captured += 1
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f"B{len(a_times)-1:02d}: {last_b_time:.1f}s (hardcoded for last A@{last_a_time:.1f}s) -> {b_filename}\n")
+                    print(f"  B{len(a_times)-1:02d} captured at {last_b_time:.1f}s (hardcoded for last A)")
+
     with open(log_path, 'a', encoding='utf-8') as log_file:
         log_file.write(f"\n=== CAPTURE COMPLETE ===\n")
         log_file.write(f"A screenshots: {len(a_times)}\n")
@@ -598,6 +618,26 @@ def _extract_ab_change_based(cap, fps, duration, start_time, change_threshold, r
                     with open(log_path, 'a', encoding='utf-8') as log_file:
                         log_file.write(f"B{i:02d}: {b_time:.1f}s (between A{i:02d}@{a1_time:.1f}s and A{i+1:02d}@{a2_time:.1f}s) -> {b_filename}\n")
                     print(f"  B{i:02d} captured at {b_time:.1f}s (between A{i:02d} and A{i+1:02d})")
+
+    # Phase 3: Capture B screenshot for the last A screenshot (hardcoded offset)
+    if a_times:  # If we have at least one A screenshot
+        last_a_time = a_times[-1]  # Get the last A screenshot time
+        last_b_time = min(last_a_time + 2.0, duration - 1.0)  # B at +2s from last A, but not beyond video
+
+        if last_b_time < duration:  # Only capture if within video duration
+            frame_number = int(last_b_time * fps)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+            ret, frame = cap.read()
+
+            if ret:
+                b_filename = f"{len(a_times)-1:02d}_{format_time(last_b_time)}_B.jpg"
+                b_path = os.path.join(raw_dir, b_filename)
+
+                if cv2.imwrite(b_path, frame):
+                    b_captured += 1
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f"B{len(a_times)-1:02d}: {last_b_time:.1f}s (hardcoded for last A@{last_a_time:.1f}s) -> {b_filename}\n")
+                    print(f"  B{len(a_times)-1:02d} captured at {last_b_time:.1f}s (hardcoded for last A)")
 
     with open(log_path, 'a', encoding='utf-8') as log_file:
         log_file.write(f"\n=== CAPTURE COMPLETE ===\n")
