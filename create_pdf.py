@@ -7,6 +7,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfutils
 from reportlab.lib.units import inch
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 import io
 import argparse
 from pathlib import Path
@@ -90,7 +92,7 @@ def fit_image_to_a4(image, a4_width, a4_height, margin=60, title_space=0):
 def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots.pdf", crop_ratio=0.32, strips_per_page=6, song_title=None):
     """
     Create PDF with stacked screenshot strips.
-    
+
     Args:
         screenshots_dir: Directory containing screenshots
         output_pdf: Output PDF filename
@@ -102,22 +104,74 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
     screenshot_files = []
     for ext in ['*.jpg', '*.jpeg', '*.png']:
         screenshot_files.extend(Path(screenshots_dir).glob(ext))
-    
+
     if not screenshot_files:
         print(f"No screenshot files found in {screenshots_dir}")
         return False
-    
+
     # Sort files by name to maintain order
     screenshot_files.sort()
     print(f"Found {len(screenshot_files)} screenshots")
-    
+
     # A4 dimensions in pixels (at 300 DPI)
     a4_width = int(8.27 * 300)  # 2481 pixels
     a4_height = int(11.69 * 300)  # 3507 pixels
-    
+
     # Create PDF
     pdf_path = os.path.join(os.getcwd(), output_pdf)
     c = canvas.Canvas(pdf_path, pagesize=A4)
+
+    # Register a Unicode font that supports Japanese characters
+    # Try to use a system font that supports Unicode, or fallback to a known font
+    try:
+        # Try to register a font that supports Japanese characters
+        # Looking for common fonts that support Japanese
+        import platform
+        if platform.system() == "Windows":
+            # Use Meiryo font which is available on Windows and supports Japanese
+            font_path = "C:/Windows/Fonts/meiryo.ttc"
+            if os.path.exists(font_path):
+                pdfmetrics.registerFont(TTFont('UnicodeFont', font_path))
+            else:
+                # Fallback: use Microsoft YaHei or similar
+                fallback_fonts = [
+                    "C:/Windows/Fonts/msyh.ttc",  # Microsoft YaHei
+                    "C:/Windows/Fonts/simsun.ttc",  # SimSun
+                    "C:/Windows/Fonts/calibri.ttf"  # Calibri as last resort (has some Unicode support)
+                ]
+                font_registered = False
+                for font_path in fallback_fonts:
+                    if os.path.exists(font_path):
+                        pdfmetrics.registerFont(TTFont('UnicodeFont', font_path))
+                        font_registered = True
+                        break
+                if not font_registered:
+                    # If no special font found, continue with default but warn
+                    print("Warning: Could not find a font supporting Japanese characters. Using default font.")
+        elif platform.system() == "Darwin":  # macOS
+            # macOS has several Japanese fonts
+            font_path = "/System/Library/Fonts/Helvetica.dfont"  # Has some Unicode
+            if os.path.exists(font_path):
+                pdfmetrics.registerFont(TTFont('UnicodeFont', font_path))
+            else:
+                print("Warning: Could not find a font supporting Japanese characters. Using default font.")
+        else:  # Linux
+            # Try to find a font that supports Japanese
+            font_paths = [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "/usr/share/fonts/TTF/FreeSans.ttf"
+            ]
+            font_registered = False
+            for font_path in font_paths:
+                if os.path.exists(font_path):
+                    pdfmetrics.registerFont(TTFont('UnicodeFont', font_path))
+                    font_registered = True
+                    break
+            if not font_registered:
+                print("Warning: Could not find a font supporting Japanese characters. Using default font.")
+    except Exception as e:
+        print(f"Warning: Could not register Unicode font: {e}. Using default font which may not support Japanese characters properly.")
     
     cropped_strips = []
     page_count = 0
@@ -174,8 +228,15 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
                 
                 # Add title on first page
                 if is_first_page and song_title:
-                    # Set font and size for title
-                    c.setFont("Helvetica-Bold", 24)
+                    # Set font and size for title - use Unicode font if available
+                    try:
+                        c.setFont("UnicodeFont", 24)  # Use the registered Unicode font
+                        font_name = "UnicodeFont"
+                    except:
+                        # If the Unicode font is not available, use default
+                        c.setFont("Helvetica-Bold", 24)
+                        font_name = "Helvetica-Bold"
+                        print("Using default font which may not support Japanese properly")
 
                     # Use the original title with international characters
                     display_title = song_title  # Don't use .title() which can break international characters
@@ -183,7 +244,7 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
                     # Calculate title position (centered horizontally, with consistent top margin)
                     # Handle potential encoding issues with international characters
                     try:
-                        title_width = c.stringWidth(display_title, "Helvetica-Bold", 24)
+                        title_width = c.stringWidth(display_title, font_name, 24)
                         title_x = (A4[0] - title_width) / 2
                     except:
                         # Fallback if string width calculation fails
