@@ -379,146 +379,151 @@ def extract_screenshots(video_path, start_time=2, interval=12, detection_method=
     return True, result_dir
 
 def _extract_ab_time_based(cap, fps, duration, start_time, interval, raw_dir, log_path, sanitized_name):
-    """Extract A/B screenshots at fixed time intervals with 2-second B delay"""
+    """Extract A/B screenshots at fixed time intervals with B between consecutive A screenshots"""
     import time
-    
+
     current_time = start_time
     process_start_time = time.time()
-    screenshot_pairs = []  # Store valid A times for B capture
-    
+    a_times = []  # Store A screenshot times for B positioning
+
     # Initialize log file
     with open(log_path, 'w', encoding='utf-8') as log_file:
         log_file.write(f"Video Analysis Log - {sanitized_name}\n")
         log_file.write(f"Video Duration: {duration:.2f} seconds\n")
-        log_file.write(f"Method: Time-based A/B capture (every {interval}s, B at +2s)\n")
+        log_file.write(f"Method: Time-based A/B capture (every {interval}s, B between A screenshots)\n")
         log_file.write(f"Start Time: {start_time}s\n")
         log_file.write("=" * 50 + "\n\n")
-    
+
     screenshot_count = 0
-    
-    # Phase 1: Capture A screenshots and validate B timing
+
+    # Phase 1: Capture A screenshots only
     print("Phase 1: Capturing A screenshots...")
     while current_time < duration:
-        b_time = current_time + 2.0  # B screenshot 2 seconds later
-        
         # Check if A screenshot is too close to video end (apply VIDEO_END_BUFFER rule)
         if current_time > (duration - Config.VIDEO_END_BUFFER):
             with open(log_path, 'a', encoding='utf-8') as log_file:
                 log_file.write(f"SKIPPED A at {current_time:.1f}s (within {Config.VIDEO_END_BUFFER}s buffer of video end at {duration:.1f}s)\n")
             current_time += interval
             continue
-        
-        if b_time < duration:  # Only capture A if B is possible
-            # Capture A screenshot
-            frame_number = int(current_time * fps)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-            ret, frame = cap.read()
-            
-            if ret:
-                a_filename = f"{screenshot_count:02d}_{format_time(current_time)}_A.jpg"
-                a_path = os.path.join(raw_dir, a_filename)
-                
-                if cv2.imwrite(a_path, frame):
-                    screenshot_pairs.append((screenshot_count, current_time, b_time))
-                    screenshot_count += 1
-                    
-                    with open(log_path, 'a', encoding='utf-8') as log_file:
-                        log_file.write(f"A{screenshot_count:02d}: {current_time:.1f}s -> {a_filename}\n")
-                        
-                    print(f"  A{screenshot_count:02d} captured at {current_time:.1f}s")
-        else:
-            with open(log_path, 'a', encoding='utf-8') as log_file:
-                log_file.write(f"SKIPPED A at {current_time:.1f}s (B would be at {b_time:.1f}s > {duration:.1f}s)\n")
-        
-        current_time += interval
-    
-    # Phase 2: Capture B screenshots
-    print(f"Phase 2: Capturing {len(screenshot_pairs)} B screenshots...")
-    b_captured = 0
-    
-    for count, a_time, b_time in screenshot_pairs:
-        frame_number = int(b_time * fps)
+
+        # Capture A screenshot
+        frame_number = int(current_time * fps)
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
         ret, frame = cap.read()
-        
+
         if ret:
-            b_filename = f"{count:02d}_{format_time(b_time)}_B.jpg"
-            b_path = os.path.join(raw_dir, b_filename)
-            
-            if cv2.imwrite(b_path, frame):
-                b_captured += 1
+            a_filename = f"{screenshot_count:02d}_{format_time(current_time)}_A.jpg"
+            a_path = os.path.join(raw_dir, a_filename)
+
+            if cv2.imwrite(a_path, frame):
+                a_times.append(current_time)
+                screenshot_count += 1
+
                 with open(log_path, 'a', encoding='utf-8') as log_file:
-                    log_file.write(f"B{count:02d}: {b_time:.1f}s -> {b_filename}\n")
-                print(f"  B{count:02d} captured at {b_time:.1f}s")
-    
+                    log_file.write(f"A{screenshot_count:02d}: {current_time:.1f}s -> {a_filename}\n")
+
+                print(f"  A{screenshot_count:02d} captured at {current_time:.1f}s")
+        else:
+            with open(log_path, 'a', encoding='utf-8') as log_file:
+                log_file.write(f"FAILED A at {current_time:.1f}s (could not read frame)\n")
+
+        current_time += interval
+
+    # Phase 2: Capture B screenshots between consecutive A screenshots
+    print(f"Phase 2: Capturing B screenshots between A pairs...")
+    b_captured = 0
+
+    # For each pair of consecutive A screenshots, place a B in the middle
+    for i in range(len(a_times) - 1):
+        a1_time = a_times[i]
+        a2_time = a_times[i + 1]
+
+        # Position B in the middle of the two A screenshots
+        b_time = (a1_time + a2_time) / 2.0
+
+        if b_time < duration:  # Only capture B if within video duration
+            frame_number = int(b_time * fps)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+            ret, frame = cap.read()
+
+            if ret:
+                b_filename = f"{i:02d}_{format_time(b_time)}_B.jpg"
+                b_path = os.path.join(raw_dir, b_filename)
+
+                if cv2.imwrite(b_path, frame):
+                    b_captured += 1
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f"B{i:02d}: {b_time:.1f}s (between A{i:02d}@{a1_time:.1f}s and A{i+1:02d}@{a2_time:.1f}s) -> {b_filename}\n")
+                    print(f"  B{i:02d} captured at {b_time:.1f}s (between A{i:02d} and A{i+1:02d})")
+
     with open(log_path, 'a', encoding='utf-8') as log_file:
         log_file.write(f"\n=== CAPTURE COMPLETE ===\n")
-        log_file.write(f"A screenshots: {len(screenshot_pairs)}\n")
+        log_file.write(f"A screenshots: {len(a_times)}\n")
         log_file.write(f"B screenshots: {b_captured}\n")
-    
-    print(f"✓ Captured {len(screenshot_pairs)} A screenshots and {b_captured} B screenshots")
+
+    print(f"✓ Captured {len(a_times)} A screenshots and {b_captured} B screenshots")
     return True
 
 def _extract_ab_change_based(cap, fps, duration, start_time, change_threshold, raw_dir, log_path, sanitized_name):
-    """Extract A/B screenshots based on content changes with 2-second B delay"""
+    """Extract A/B screenshots based on content changes with B between consecutive A screenshots"""
     import time
-    
+
     # Start from the beginning or specified start time
     cap.set(cv2.CAP_PROP_POS_MSEC, start_time * 1000)
-    
+
     previous_frame = None
     frame_count = 0
     min_interval_frames = int(fps * Config.MIN_SCREENSHOT_INTERVAL)  # Minimum interval between A screenshots
     frames_since_last_screenshot = 0
     check_interval_frames = max(1, int(fps * Config.FRAME_CHECK_INTERVAL))  # Check frames interval
-    screenshot_pairs = []  # Store valid A times for B capture
-    
+    a_times = []  # Store A screenshot times for B positioning
+
     print(f"Analyzing video for content changes (threshold: {change_threshold*100}%)...")
     print(f"Checking frames every {Config.FRAME_CHECK_INTERVAL}s ({check_interval_frames} frames)")
-    
+
     # Initialize log file
     with open(log_path, 'w', encoding='utf-8') as log_file:
         log_file.write(f"Video Analysis Log - {sanitized_name}\n")
         log_file.write(f"Video Duration: {duration:.2f} seconds\n")
-        log_file.write(f"Method: Change-based A/B capture ({change_threshold*100}% threshold, B at +2s)\n")
+        log_file.write(f"Method: Change-based A/B capture ({change_threshold*100}% threshold, B between A screenshots)\n")
         log_file.write(f"Start Time: {start_time}s\n")
         log_file.write("=" * 50 + "\n\n")
-    
+
     # Progress tracking
     process_start_time = time.time()
     last_progress_update = 0
     screenshot_count = 0
-    
+
     # Frame change tracking for visualization
     frame_change_data = []  # List of (time, change_percentage) tuples
-    
-    # Phase 1: Analyze and capture A screenshots
+
+    # Phase 1: Analyze and capture A screenshots only
     print("Phase 1: Analyzing content changes and capturing A screenshots...")
-    
+
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-            
+
         frame_count += 1
         frames_since_last_screenshot += 1
         current_time = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
-        
+
         # Update progress indicator
         current_real_time = time.time()
         if current_real_time - last_progress_update >= Config.PROGRESS_UPDATE_INTERVAL:
             progress_percent = (current_time / duration) * 100
             print(f"\rProgress: [{'█' * int(progress_percent/2.5)}{'.' * (40-int(progress_percent/2.5))}] {progress_percent:.1f}% ({current_time:.1f}s/{duration:.1f}s)", end='', flush=True)
             last_progress_update = current_real_time
-        
+
         # Check for content changes
         if frame_count % check_interval_frames == 0:
             if previous_frame is not None:
                 change_percentage = detect_frame_change(previous_frame, frame, top_ratio=Config.TOP_ANALYSIS_RATIO)
-                
+
                 # Store frame change data for visualization
                 frame_change_data.append((current_time, change_percentage))
-                
+
                 # Check for major scene change
                 if change_percentage >= Config.MAJOR_SCENE_CHANGE_THRESHOLD:
                     with open(log_path, 'a', encoding='utf-8') as log_file:
@@ -527,7 +532,7 @@ def _extract_ab_change_based(cap, fps, duration, start_time, change_threshold, r
                     print(f"\n\n>>> MAJOR SCENE CHANGE DETECTED at {current_time:.1f}s ({change_percentage:.1f}% >= {Config.MAJOR_SCENE_CHANGE_THRESHOLD}%)")
                     print(">>> STOPPING CAPTURE PROCESS")
                     break
-                
+
                 # Check if change exceeds threshold and minimum interval has passed
                 if change_percentage >= (change_threshold * 100) and frames_since_last_screenshot >= min_interval_frames:
                     # Check if A screenshot is too close to video end (apply VIDEO_END_BUFFER rule)
@@ -535,75 +540,78 @@ def _extract_ab_change_based(cap, fps, duration, start_time, change_threshold, r
                         with open(log_path, 'a', encoding='utf-8') as log_file:
                             log_file.write(f"\nSKIPPED A at {current_time:.1f}s (within {Config.VIDEO_END_BUFFER}s buffer of video end at {duration:.1f}s)\n")
                     else:
-                        b_time = current_time + 2.0  # B screenshot 2 seconds later
-                        
-                        if b_time < duration:  # Only capture A if B is possible
-                            a_filename = f"{screenshot_count:02d}_{format_time(current_time)}_A.jpg"
-                            a_path = os.path.join(raw_dir, a_filename)
-                            
-                            if cv2.imwrite(a_path, frame):
-                                screenshot_pairs.append((screenshot_count, current_time, b_time))
-                                screenshot_count += 1
-                                frames_since_last_screenshot = 0
-                                
-                                with open(log_path, 'a', encoding='utf-8') as log_file:
-                                    log_file.write(f"\nA{screenshot_count:02d}: {current_time:.1f}s ({change_percentage:.1f}% >= {change_threshold*100}%) -> {a_filename}\n")
-                        else:
-                            with open(log_path, 'a', encoding='utf-8') as log_file:
-                                log_file.write(f"\nSKIPPED A at {current_time:.1f}s (B would be at {b_time:.1f}s > {duration:.1f}s)\n")
-            else:
-                # Save first frame if B is possible and not within video end buffer
-                if current_time <= (duration - Config.VIDEO_END_BUFFER):
-                    b_time = current_time + 2.0
-                    if b_time < duration:
+                        # Capture A screenshot without setting B time yet
                         a_filename = f"{screenshot_count:02d}_{format_time(current_time)}_A.jpg"
                         a_path = os.path.join(raw_dir, a_filename)
-                        
+
                         if cv2.imwrite(a_path, frame):
-                            screenshot_pairs.append((screenshot_count, current_time, b_time))
+                            a_times.append(current_time)
                             screenshot_count += 1
                             frames_since_last_screenshot = 0
-                            
+
                             with open(log_path, 'a', encoding='utf-8') as log_file:
-                                log_file.write(f"\nINITIAL A{screenshot_count:02d}: {current_time:.1f}s -> {a_filename}\n")
+                                log_file.write(f"\nA{screenshot_count:02d}: {current_time:.1f}s ({change_percentage:.1f}% >= {change_threshold*100}%) -> {a_filename}\n")
+            else:
+                # Save first frame if not within video end buffer
+                if current_time <= (duration - Config.VIDEO_END_BUFFER):
+                    a_filename = f"{screenshot_count:02d}_{format_time(current_time)}_A.jpg"
+                    a_path = os.path.join(raw_dir, a_filename)
+
+                    if cv2.imwrite(a_path, frame):
+                        a_times.append(current_time)
+                        screenshot_count += 1
+                        frames_since_last_screenshot = 0
+
+                        with open(log_path, 'a', encoding='utf-8') as log_file:
+                            log_file.write(f"\nINITIAL A{screenshot_count:02d}: {current_time:.1f}s -> {a_filename}\n")
                 else:
                     with open(log_path, 'a', encoding='utf-8') as log_file:
                         log_file.write(f"\nSKIPPED INITIAL A at {current_time:.1f}s (within {Config.VIDEO_END_BUFFER}s buffer of video end at {duration:.1f}s)\n")
-        
+
         # Update previous frame every check interval
         if frame_count % check_interval_frames == 0:
             previous_frame = frame.copy()
-    
-    print(f"\n\nPhase 2: Capturing {len(screenshot_pairs)} B screenshots...")
-    
-    # Phase 2: Capture B screenshots
+
+    print(f"\n\nPhase 2: Capturing B screenshots between A pairs...")
+
+    # Phase 2: Capture B screenshots between consecutive A screenshots
     b_captured = 0
-    for count, a_time, b_time in screenshot_pairs:
-        cap.set(cv2.CAP_PROP_POS_MSEC, b_time * 1000)
-        ret, frame = cap.read()
-        
-        if ret:
-            b_filename = f"{count:02d}_{format_time(b_time)}_B.jpg"
-            b_path = os.path.join(raw_dir, b_filename)
-            
-            if cv2.imwrite(b_path, frame):
-                b_captured += 1
-                with open(log_path, 'a', encoding='utf-8') as log_file:
-                    log_file.write(f"B{count:02d}: {b_time:.1f}s -> {b_filename}\n")
-    
+    # For each pair of consecutive A screenshots, place a B in the middle
+    for i in range(len(a_times) - 1):
+        a1_time = a_times[i]
+        a2_time = a_times[i + 1]
+
+        # Position B in the middle of the two A screenshots
+        b_time = (a1_time + a2_time) / 2.0
+
+        if b_time < duration:  # Only capture B if within video duration
+            frame_number = int(b_time * fps)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+            ret, frame = cap.read()
+
+            if ret:
+                b_filename = f"{i:02d}_{format_time(b_time)}_B.jpg"
+                b_path = os.path.join(raw_dir, b_filename)
+
+                if cv2.imwrite(b_path, frame):
+                    b_captured += 1
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f"B{i:02d}: {b_time:.1f}s (between A{i:02d}@{a1_time:.1f}s and A{i+1:02d}@{a2_time:.1f}s) -> {b_filename}\n")
+                    print(f"  B{i:02d} captured at {b_time:.1f}s (between A{i:02d} and A{i+1:02d})")
+
     with open(log_path, 'a', encoding='utf-8') as log_file:
         log_file.write(f"\n=== CAPTURE COMPLETE ===\n")
-        log_file.write(f"A screenshots: {len(screenshot_pairs)}\n")
+        log_file.write(f"A screenshots: {len(a_times)}\n")
         log_file.write(f"B screenshots: {b_captured}\n")
-    
+
     # Save frame change data for visualization
     frame_change_file = log_path.replace('_log.txt', '_frame_changes.txt')
     with open(frame_change_file, 'w', encoding='utf-8') as f:
         f.write("Time(s),ChangePercentage\n")
         for time_val, change_val in frame_change_data:
             f.write(f"{time_val:.2f},{change_val:.2f}\n")
-    
-    print(f"✓ Captured {len(screenshot_pairs)} A screenshots and {b_captured} B screenshots")
+
+    print(f"✓ Captured {len(a_times)} A screenshots and {b_captured} B screenshots")
     print(f"✓ Frame change data saved: {frame_change_file}")
     return True
 
@@ -823,25 +831,40 @@ def merge_unique_ab_screenshots(raw_dir, result_dir, duplicates, log_path):
             
         a_file = a_files[idx]
         
-        # Find corresponding B file - B files are named with +2 seconds from A files
-        # Extract time from A filename and add 2 seconds for B filename
+        # Find corresponding B file - With dynamic B positioning, B screenshots are
+        # positioned between consecutive A screenshots. For each A[i], the corresponding
+        # B should be B[i] if available, where B[i] is positioned between A[i] and A[i+1].
+        # Both A and B filenames use the same index prefix (XX_...), so find B with same index.
         import re
-        time_match = re.search(r'(\d{2})_(\d{2})m(\d{2})s_A\.jpg', a_file.name)
-        if time_match:
-            file_idx, minutes, seconds = time_match.groups()
-            total_seconds = int(minutes) * 60 + int(seconds) + 2  # Add 2 seconds for B
-            b_minutes = total_seconds // 60
-            b_seconds = total_seconds % 60
-            b_name = f"{file_idx}_{b_minutes:02d}m{b_seconds:02d}s_B.jpg"
+        # Extract just the index from the A filename (first two digits)
+        index_match = re.match(r'(\d{2})_', a_file.name)
+        if index_match:
+            file_idx = index_match.group(1)
+            # Look for B file with same index prefix, regardless of the time part
+            # Find all B files that have the same index prefix
+            possible_b_files = [f for f in Path(raw_dir).glob(f"{file_idx}_*_B.jpg")]
+            if possible_b_files:
+                # Use the first B file with matching index
+                b_file = possible_b_files[0]
+                b_exists_by_index = True
+            else:
+                b_exists_by_index = False
+                b_file = None
         else:
-            # Fallback to simple replacement if pattern doesn't match
-            b_name = a_file.stem.replace('_A', '_B') + '.jpg'
-        
-        b_file = Path(raw_dir) / b_name
-        
-        if not b_file.exists():
+            # Fallback to old method if index pattern doesn't match
+            b_exists_by_index = False
+            b_file = None
+
+        # If we found a B file by index, check if it exists
+        if b_exists_by_index and b_file and b_file.exists():
+            pass  # b_file is already set to the correct file
+        else:
+            # Either B file wasn't found by index or doesn't exist, set b_file to None
+            b_file = None
+
+        if not b_file or not b_file.exists():
             with open(log_path, 'a', encoding='utf-8') as log_file:
-                log_file.write(f"WARNING: No B file found for {a_file.name} (expected: {b_name})\n")
+                log_file.write(f"WARNING: No B file found for {a_file.name} (index-based lookup)\n")
             continue
         
         # Load both images
