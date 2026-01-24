@@ -6,10 +6,48 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfutils
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import pdfmetrics
 from reportlab.lib.units import inch
 import io
 import argparse
 from pathlib import Path
+import platform
+
+# Register Japanese font (Meiryo) for Windows
+def register_japanese_font():
+    """Register Meiryo font for Japanese text support"""
+    try:
+        if platform.system() == 'Windows':
+            # Try to register Meiryo font
+            meiryo_paths = [
+                'C:/Windows/Fonts/meiryo.ttc',
+                'C:/Windows/Fonts/meiryo.ttf',
+                'C:/Windows/Fonts/Meiryo.ttf'
+            ]
+            
+            for font_path in meiryo_paths:
+                if os.path.exists(font_path):
+                    pdfmetrics.registerFont(TTFont('Meiryo', font_path))
+                    return 'Meiryo'
+            
+            # Fallback to MS Gothic if Meiryo not found
+            msgothic_paths = [
+                'C:/Windows/Fonts/msgothic.ttc',
+                'C:/Windows/Fonts/msgothic.ttf'
+            ]
+            
+            for font_path in msgothic_paths:
+                if os.path.exists(font_path):
+                    pdfmetrics.registerFont(TTFont('MSGothic', font_path))
+                    return 'MSGothic'
+        
+        # Default fallback
+        return 'Helvetica'
+        
+    except Exception as e:
+        print(f"Warning: Could not register Japanese font: {e}")
+        return 'Helvetica'
 
 def crop_top_portion(image, ratio=0.32):
     """
@@ -163,14 +201,18 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
                 
                 # Add title on first page
                 if is_first_page and song_title:
-                    # Set font and size for title
-                    c.setFont("Helvetica-Bold", 24)
+                    # Register and use Japanese font
+                    font_name = register_japanese_font()
+                    font_size = 24
                     
-                    # Convert title to title case for display (capitalize first letter of each word)
-                    display_title = song_title.title()
+                    # Set font for title
+                    c.setFont(font_name, font_size)
+                    
+                    # Use original title (no title case conversion for Japanese)
+                    display_title = song_title
                     
                     # Calculate title position (centered horizontally, with consistent top margin)
-                    title_width = c.stringWidth(display_title, "Helvetica-Bold", 24)
+                    title_width = c.stringWidth(display_title, font_name, font_size)
                     title_x = (A4[0] - title_width) / 2
                     title_y = A4[1] - 40  # 40 points from top (about 0.56 inches) for title
                     

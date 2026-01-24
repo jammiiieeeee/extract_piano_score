@@ -2173,6 +2173,7 @@ def main():
     parser.add_argument("--change-threshold", type=float, default=Config.CHANGE_DETECTION_THRESHOLD, help=f"Threshold for change detection method (0.0-1.0, default: {Config.CHANGE_DETECTION_THRESHOLD} = {Config.CHANGE_DETECTION_THRESHOLD*100} percent)")
     parser.add_argument("--test", action="store_true", help="Test mode: only check video properties without extracting screenshots")
     parser.add_argument("--create-pdf", action="store_true", help="Create PDF after extracting screenshots")
+    parser.add_argument("--custom-title", type=str, help="Custom title for PDF filename and content (supports Japanese)")
     parser.add_argument("--crop-ratio", type=float, default=0.32, help="Portion of height to keep from top for PDF (default: 0.32)")
     parser.add_argument("--strips-per-page", type=int, default=6, help="Maximum strips per A4 page (default: 6)")
     parser.add_argument("--recapture", action="store_true", help="Force recapture of screenshots, replacing existing raw folder")
@@ -2277,7 +2278,11 @@ def main():
                     create_pdf_module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(create_pdf_module)
                     
-                    pdf_filename = f"{sanitized_name}_score.pdf"
+                    # Use custom title if provided, otherwise use sanitized video name
+                    pdf_title = args.custom_title if args.custom_title else sanitized_name
+                    pdf_title_safe = sanitize_filename(pdf_title) if args.custom_title else sanitized_name
+                    
+                    pdf_filename = f"{pdf_title_safe}_score.pdf"
                     pdf_path = os.path.join(main_folder, pdf_filename)
                     
                     print(f"Creating PDF: {pdf_path}")
@@ -2286,7 +2291,7 @@ def main():
                         pdf_path, 
                         args.crop_ratio, 
                         args.strips_per_page,
-                        sanitized_name  # Pass song title
+                        pdf_title  # Pass original title (with Japanese chars)
                     )
                     
                     if success:
