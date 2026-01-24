@@ -348,7 +348,7 @@ def detect_frame_change(frame1, frame2, top_ratio=None, threshold=None):
     
     return change_percentage
 
-def extract_screenshots(video_path, start_time=2, interval=12, detection_method='time', change_threshold=None, force_recapture=False):
+def extract_screenshots(video_path, start_time=2, interval=12, detection_method='time', change_threshold=None, force_recapture=False, custom_folder_name=None):
     """
     Extract screenshots from video with A/B capture system and organized folder structure.
     
@@ -372,18 +372,28 @@ def extract_screenshots(video_path, start_time=2, interval=12, detection_method=
     video_name = Path(video_path).stem
     sanitized_name = sanitize_filename(video_name)
     
-    print(f"Original filename: {video_name}")
-    print(f"Sanitized filename: {sanitized_name}")
+    # Use custom folder name if provided, otherwise use sanitized video name
+    if custom_folder_name:
+        display_folder_name = sanitize_filename(custom_folder_name)
+        # Create ASCII-safe folder name for file operations (OpenCV cannot write to Unicode paths on Windows)
+        ascii_folder_name = sanitized_name  # Use original video name which is ASCII-safe
+    else:
+        display_folder_name = sanitized_name
+        ascii_folder_name = sanitized_name
     
-    # Create organized folder structure:
-    # [video_name]/
+    print(f"Original filename: {video_name}")
+    print(f"Display folder name: {display_folder_name}")
+    print(f"ASCII folder name (for file ops): {ascii_folder_name}")
+    
+    # Create organized folder structure using ASCII-safe name:
+    # [ascii_folder_name]/
     #   ├── screenshots/
     #   │   ├── raw/           # All A and B screenshots
     #   │   ├── result/        # Merged unique A+B screenshots
     #   │   └── duplicate/     # Duplicate pairs
-    #   ├── [video_name]_log.txt
-    #   └── [video_name]_similarity_heatmap.html
-    main_folder = os.path.join(os.getcwd(), sanitized_name)
+    #   ├── [sanitized_name]_log.txt
+    #   └── [sanitized_name]_similarity_heatmap.html
+    main_folder = os.path.join(os.getcwd(), ascii_folder_name)
     screenshots_dir = os.path.join(main_folder, "screenshots")
     raw_dir = os.path.join(screenshots_dir, "raw")
     result_dir = os.path.join(screenshots_dir, "result")
@@ -468,7 +478,10 @@ def extract_screenshots(video_path, start_time=2, interval=12, detection_method=
     
     # Always run duplicate detection and processing steps
     print("\n=== PROCESSING EXISTING SCREENSHOTS ===")
-    return _process_screenshots(main_folder, raw_dir, result_dir, duplicate_dir, sanitized_name)
+    result = _process_screenshots(main_folder, raw_dir, result_dir, duplicate_dir, sanitized_name)
+    
+    # Return both success status and folder names for PDF creation
+    return result, ascii_folder_name, display_folder_name
 
 def _extract_ab_time_based(cap, fps, duration, start_time, interval, raw_dir, log_path, sanitized_name):
     """Extract A/B screenshots at fixed time intervals with 2-second B delay"""
@@ -2226,23 +2239,33 @@ def main():
         return
     
     # Extract screenshots
+    # Determine folder name for main folder
+    custom_folder_name = args.custom_title if args.custom_title else None
+    
     result = extract_screenshots(
         args.video_path, 
         args.start, 
         args.interval, 
         args.method, 
         args.change_threshold,
-        args.recapture
+        args.recapture,
+        custom_folder_name
     )
     
-    if isinstance(result, tuple):
+    if isinstance(result, tuple) and len(result) == 3:
+        success, ascii_folder_name, display_folder_name = result
+    elif isinstance(result, tuple):
         success, screenshots_dir = result
+        # Fallback for old return format
+        video_name = Path(args.video_path).stem
+        ascii_folder_name = sanitize_filename(video_name)
+        display_folder_name = ascii_folder_name
     else:
         success = result
         # Fallback to old structure if needed
         video_name = Path(args.video_path).stem
-        sanitized_name = sanitize_filename(video_name)
-        screenshots_dir = os.path.join(os.getcwd(), f"{sanitized_name}_screenshots")
+        ascii_folder_name = sanitize_filename(video_name)
+        display_folder_name = ascii_folder_name
     
     if not success:
         sys.exit(1)
@@ -2252,7 +2275,9 @@ def main():
         print("\n=== CREATING PDF ===")
         video_name = Path(args.video_path).stem
         sanitized_name = sanitize_filename(video_name)
-        main_folder = os.path.join(os.getcwd(), sanitized_name)
+        
+        # Use ASCII folder name for file operations (to avoid Unicode path issues)
+        main_folder = os.path.join(os.getcwd(), ascii_folder_name)
         
         # Prefer result folder (merged screenshots) if it exists, otherwise use main screenshots folder
         result_dir = os.path.join(main_folder, "screenshots", "result")
