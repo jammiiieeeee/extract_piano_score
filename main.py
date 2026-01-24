@@ -1,11 +1,76 @@
-import cv2
 import os
-import argparse
 import sys
+
+# ===== CRITICAL FIX: SET ENV FLAGS BEFORE IMPORTING PADDLE =====
+# These must be set before 'from paddleocr import ...' runs
+os.environ['FLAGS_use_mkldnn'] = '0'
+os.environ['FLAGS_enable_mkldnn'] = '0'
+os.environ['FLAGS_use_ngraph'] = 'False'
+os.environ['PADDLE_DISABLE_STATIC'] = 'True'
+# Disable the PIR (Program Intermediate Representation) to Runtime conversion if possible
+os.environ['FLAGS_enable_pir_in_executor'] = '0'
+os.environ['FLAGS_enable_pir_api'] = '0' 
+
+import cv2
+import argparse
 import re
 import numpy as np
 import json
+import time
+import shutil
 from pathlib import Path
+from PIL import Image
+
+# Import PaddleOCR after setting flags
+try:
+    from paddleocr import PaddleOCR
+except ImportError:
+    print("Error: PaddleOCR not installed. Please run: pip install paddlepaddle paddleocr")
+    sys.exit(1)
+
+# Initialize PaddleOCR with multiple fallback attempts
+ocr = None
+print("Initializing PaddleOCR...")
+
+# Try multiple initialization strategies
+# Added 'enable_mkldnn=False' explicitly to constructors
+initialization_attempts = [
+    # Attempt 1: Most conservative (CPU only, no MKLDNN, no angle class)
+    lambda: PaddleOCR(
+        lang='en', 
+        use_gpu=False, 
+        show_log=False, 
+        enable_mkldnn=False,
+        use_mp=True, 
+        total_process_num=2
+    ),
+    # Attempt 2: Standard CPU with MKLDNN disabled
+    lambda: PaddleOCR(
+        lang='en', 
+        use_gpu=False, 
+        enable_mkldnn=False
+    ),
+    # Attempt 3: Default
+    lambda: PaddleOCR(lang='en', enable_mkldnn=False),
+    # Attempt 4: Bare minimum
+    lambda: PaddleOCR(enable_mkldnn=False)
+]
+
+for i, init_func in enumerate(initialization_attempts):
+    try:
+        print(f"  Attempt {i+1}: ", end="")
+        ocr = init_func()
+        
+        # specific check to ensure the model loaded
+        if ocr:
+            print("SUCCESS")
+            break
+    except Exception as e:
+        print(f"FAILED - {e}")
+        if i == len(initialization_attempts) - 1:
+            print("All PaddleOCR initialization attempts failed!")
+            print("Try running: python -m pip install --upgrade paddlepaddle paddleocr")
+            ocr = None
 
 # ===== CONFIGURATION THRESHOLDS =====
 # All configurable thresholds grouped for easy access and modification
@@ -28,8 +93,9 @@ class Config:
     ROW_COVERAGE_THRESHOLD = 0.94          # Test 2: 94% of rows must pass
     
     # ---- A/B Merging Parameters ----
-    B_CAPTURE_DELAY = 3.0                  # Seconds delay for B screenshot capture
-    B_OVERLAY_WIDTH_RATIO = 0.20           # Use left 20% of B screenshot for overlay
+    A_CAPTURE_DELAY = 0                 # Seconds delay for A screenshot after change detection
+    B_CAPTURE_DELAY = 6                  # Seconds delay for B screenshot capture
+    B_OVERLAY_WIDTH_RATIO = 0.3           # Use left 20% of B screenshot for overlay
     
     # ---- Image Processing Thresholds ----
     PIXEL_INTENSITY_THRESHOLD = 30         # Intensity threshold for binary diff
@@ -38,8 +104,168 @@ class Config:
     # ---- PDF Generation Defaults ----
     DEFAULT_CROP_RATIO = 0.32              # Default PDF crop ratio (32% from top)
     DEFAULT_STRIPS_PER_PAGE = 6            # Default strips per PDF page
+    
+    # ---- OCR Configuration ----
+    OCR_CROP_RATIO = DEFAULT_CROP_RATIO     # Use same ratio as PDF crop for OCR analysis (top portion)
+    OCR_HORIZONTAL_RATIO = 0.30              # Horizontal portion to analyze (0.5 = left 50%)
+    OCR_CONFIDENCE_THRESHOLD = 40           # Minimum confidence for OCR text extraction (0-100, higher = more strict)
+    # Note: OCR analyzes top OCR_CROP_RATIO and left OCR_HORIZONTAL_RATIO of image, returns only leftmost number
+    # Confidence threshold: 0-30 = lenient, 30-60 = balanced, 60-100 = strict
 
 # =====================================
+
+def extract_ocr_numbers(image_path):
+    """
+    Extract the leftmost number from the top-left portion of an image using OCR.
+    Returns tuple: (number_list, bbox_info) where bbox_info contains the bounding box of the detected number
+    """
+    try:
+        # Load image
+        image = Image.open(image_path)
+        width, height = image.size
+        
+        # Crop to top portion using OCR_CROP_RATIO and configurable horizontal ratio
+        crop_height = int(height * Config.OCR_CROP_RATIO)
+        crop_width = int(width * Config.OCR_HORIZONTAL_RATIO)
+        cropped_image = image.crop((0, 0, crop_width, crop_height))
+        
+        # Convert PIL image to numpy array for PaddleOCR
+        img_array = np.array(cropped_image)
+        
+        # Extract text using PaddleOCR
+        results = None
+        high_confidence_numbers = []
+        
+        if ocr is not None:
+            try:
+                # 
+                results = ocr.ocr(img_array)
+                
+                # Debug: print raw OCR results to help troubleshoot
+                print(f"  Debug OCR raw results for {os.path.basename(image_path)}: {results}")
+
+                if not results:
+                    return []
+
+                # Collect numbers with their x-coordinates and bounding boxes for spatial sorting
+                numbers_with_positions = []
+
+                # --- FORMAT 1: New Dictionary Format (PaddleX / v2.7+) ---
+                # Structure: [{'rec_texts': ['123', 'Text'], 'rec_scores': [0.99, 0.98], 'rec_polys': [bbox_array], ...}]
+                if isinstance(results, list) and len(results) > 0 and isinstance(results[0], dict):
+                    data = results[0]
+                    # Check if 'rec_texts' and 'rec_scores' exist
+                    if 'rec_texts' in data and 'rec_scores' in data:
+                        texts = data['rec_texts']
+                        scores = data['rec_scores']
+                        polys = data.get('rec_polys', [])  # Get polygon coordinates if available
+                        
+                        for i, text in enumerate(texts):
+                            score = scores[i]
+                            # Filter by confidence
+                            if score * 100 >= Config.OCR_CONFIDENCE_THRESHOLD:
+                                # Extract numbers
+                                numbers_in_text = re.findall(r'\d+', text)
+                                # Get bounding box if available
+                                bbox = polys[i] if i < len(polys) else None
+                                if bbox is not None:
+                                    # Convert numpy array to list format
+                                    bbox_list = bbox.tolist() if hasattr(bbox, 'tolist') else bbox
+                                    min_x = min(point[0] for point in bbox_list)
+                                    for num in numbers_in_text:
+                                        numbers_with_positions.append((int(num), min_x, bbox_list))
+                                else:
+                                    # No bbox available, use index as position
+                                    for num in numbers_in_text:
+                                        numbers_with_positions.append((int(num), i, None))
+
+                # --- FORMAT 2: Legacy List Format ---
+                # Structure: [[[[x,y],..], ('Text', 0.99)], ...]
+                elif isinstance(results, list) and len(results) > 0 and isinstance(results[0], list):
+                    for line in results[0]:
+                        if line and len(line) >= 2:
+                            bbox = line[0]  # Bounding box coordinates
+                            text = line[1][0]
+                            score = line[1][1]
+                            
+                            if score * 100 >= Config.OCR_CONFIDENCE_THRESHOLD:
+                                numbers_in_text = re.findall(r'\d+', text)
+                                # Get leftmost x-coordinate from bounding box
+                                if bbox and len(bbox) >= 4:
+                                    # bbox is [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+                                    min_x = min(point[0] for point in bbox)
+                                    for num in numbers_in_text:
+                                        numbers_with_positions.append((int(num), min_x, bbox))
+                
+                # --- FORMAT 3: Flat List (Rare edge case) ---
+                elif isinstance(results, list) and len(results) > 0:
+                    # Sometimes results is just the inner list directly
+                    for line in results:
+                        if isinstance(line, list) and len(line) >= 2 and isinstance(line[1], tuple):
+                            bbox = line[0]
+                            text = line[1][0]
+                            score = line[1][1]
+                            if score * 100 >= Config.OCR_CONFIDENCE_THRESHOLD:
+                                numbers_in_text = re.findall(r'\d+', text)
+                                if bbox and len(bbox) >= 4:
+                                    min_x = min(point[0] for point in bbox)
+                                    for num in numbers_in_text:
+                                        numbers_with_positions.append((int(num), min_x, bbox))
+
+            except Exception as ocr_e:
+                print(f"  Internal OCR parsing error: {ocr_e}")
+                return []
+        
+        # Sort by x-coordinate (position) and return the leftmost number with bbox
+        if numbers_with_positions:
+            try:
+                # Sort by x-coordinate (second element), get the leftmost
+                leftmost_entry = sorted(numbers_with_positions, key=lambda x: x[1])[0]
+                leftmost_number = leftmost_entry[0]
+                leftmost_bbox = leftmost_entry[2] if len(leftmost_entry) > 2 else None
+                
+                print(f"  OCR Found Leftmost Number: {leftmost_number} at x={leftmost_entry[1]} in {os.path.basename(image_path)}")
+                print(f"  Bbox info available: {leftmost_bbox is not None}")
+                if leftmost_bbox:
+                    print(f"  Bbox coordinates: {leftmost_bbox}")
+                    
+                return [leftmost_number], leftmost_bbox
+            except (ValueError, IndexError):
+                pass
+        
+        print(f"  No OCR numbers found in {os.path.basename(image_path)}")
+        return [], None
+        
+    except Exception as e:
+        print(f"OCR error for {image_path}: {e}")
+        return []
+    
+def compare_ocr_results(numbers1, numbers2, tolerance=0.1):
+    """
+    Compare two lists of OCR-extracted leftmost numbers.
+    
+    Args:
+        numbers1: List containing leftmost number from first image (0-1 items)
+        numbers2: List containing leftmost number from second image (0-1 items)
+        tolerance: Tolerance for floating point comparison
+    
+    Returns:
+        bool: True if numbers are significantly different (NOT duplicates)
+    """
+    # If both lists are empty, could be duplicates (no numbers found in either)
+    if not numbers1 and not numbers2:
+        return False  # Both empty, could be duplicates
+    
+    # If one has a number and the other doesn't, they're different
+    if not numbers1 or not numbers2:
+        return True   # One empty, one not - different
+    
+    # Both have exactly one number each (leftmost), compare them
+    if len(numbers1) == 1 and len(numbers2) == 1:
+        return abs(numbers1[0] - numbers2[0]) > tolerance
+    
+    # Shouldn't happen with the new implementation, but handle edge case
+    return True  # Different if unexpected structure
 
 def sanitize_filename(filename):
     """
@@ -346,7 +572,7 @@ def _extract_ab_change_based(cap, fps, duration, start_time, change_threshold, r
     with open(log_path, 'w', encoding='utf-8') as log_file:
         log_file.write(f"Video Analysis Log - {sanitized_name}\n")
         log_file.write(f"Video Duration: {duration:.2f} seconds\n")
-        log_file.write(f"Method: Change-based A/B capture ({change_threshold*100}% threshold, B at +2s)\n")
+        log_file.write(f"Method: Change-based A/B capture ({change_threshold*100}% threshold, A at +{Config.A_CAPTURE_DELAY}s, B at +{Config.A_CAPTURE_DELAY + Config.B_CAPTURE_DELAY}s)\n")
         log_file.write(f"Start Time: {start_time}s\n")
         log_file.write("=" * 50 + "\n\n")
     
@@ -396,45 +622,73 @@ def _extract_ab_change_based(cap, fps, duration, start_time, change_threshold, r
                 
                 # Check if change exceeds threshold and minimum interval has passed
                 if change_percentage >= (change_threshold * 100) and frames_since_last_screenshot >= min_interval_frames:
-                    # Check if A screenshot is too close to video end (apply VIDEO_END_BUFFER rule)
-                    if current_time > (duration - Config.VIDEO_END_BUFFER):
+                    # Calculate delayed capture times
+                    a_capture_time = current_time + Config.A_CAPTURE_DELAY  # Delay A capture by 0.5s
+                    b_capture_time = a_capture_time + Config.B_CAPTURE_DELAY  # B capture after A
+                    
+                    # Check if delayed A screenshot is too close to video end
+                    if a_capture_time > (duration - Config.VIDEO_END_BUFFER):
                         with open(log_path, 'a', encoding='utf-8') as log_file:
-                            log_file.write(f"\nSKIPPED A at {current_time:.1f}s (within {Config.VIDEO_END_BUFFER}s buffer of video end at {duration:.1f}s)\n")
+                            log_file.write(f"\nSKIPPED A at {current_time:.1f}s (delayed A would be at {a_capture_time:.1f}s within {Config.VIDEO_END_BUFFER}s buffer of video end at {duration:.1f}s)\n")
                     else:
-                        b_time = current_time + 2.0  # B screenshot 2 seconds later
+                        # Check if B capture time is within video bounds
+                        if b_capture_time < duration:
+                            # Seek to delayed A capture time and capture
+                            cap.set(cv2.CAP_PROP_POS_MSEC, a_capture_time * 1000)
+                            ret_delayed, delayed_frame = cap.read()
+                            
+                            if ret_delayed:
+                                a_filename = f"{screenshot_count:02d}_{format_time(a_capture_time)}_A.jpg"
+                                a_path = os.path.join(raw_dir, a_filename)
+                                
+                                if cv2.imwrite(a_path, delayed_frame):
+                                    screenshot_pairs.append((screenshot_count, a_capture_time, b_capture_time))
+                                    screenshot_count += 1
+                                    frames_since_last_screenshot = 0
+                                    
+                                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                                        log_file.write(f"\nCHANGE DETECTED at {current_time:.1f}s: {change_percentage:.1f}% change\n")
+                                        log_file.write(f"  → A{screenshot_count:02d} captured at {a_capture_time:.1f}s (+{Config.A_CAPTURE_DELAY}s delay) -> {a_filename}\n")
+                                        log_file.write(f"  → B scheduled for {b_capture_time:.1f}s (+{Config.A_CAPTURE_DELAY + Config.B_CAPTURE_DELAY}s total delay)\n")
+                                    
+                                    # Return to original position for continued analysis
+                                    cap.set(cv2.CAP_PROP_POS_MSEC, current_time * 1000)
+                            else:
+                                with open(log_path, 'a', encoding='utf-8') as log_file:
+                                    log_file.write(f"\nFAILED to read delayed A frame at {a_capture_time:.1f}s\n")
+                                # Return to original position
+                                cap.set(cv2.CAP_PROP_POS_MSEC, current_time * 1000)
+                        else:
+                            with open(log_path, 'a', encoding='utf-8') as log_file:
+                                log_file.write(f"\nSKIPPED A at {current_time:.1f}s (delayed B would be at {b_capture_time:.1f}s > {duration:.1f}s)\n")
+            else:
+                # Save first frame with delayed timing if B is possible and not within video end buffer
+                a_capture_time = current_time + Config.A_CAPTURE_DELAY
+                b_capture_time = a_capture_time + Config.B_CAPTURE_DELAY
+                
+                if a_capture_time <= (duration - Config.VIDEO_END_BUFFER):
+                    if b_capture_time < duration:
+                        # Seek to delayed A capture time
+                        cap.set(cv2.CAP_PROP_POS_MSEC, a_capture_time * 1000)
+                        ret_delayed, delayed_frame = cap.read()
                         
-                        if b_time < duration:  # Only capture A if B is possible
-                            a_filename = f"{screenshot_count:02d}_{format_time(current_time)}_A.jpg"
+                        if ret_delayed:
+                            a_filename = f"{screenshot_count:02d}_{format_time(a_capture_time)}_A.jpg"
                             a_path = os.path.join(raw_dir, a_filename)
                             
-                            if cv2.imwrite(a_path, frame):
-                                screenshot_pairs.append((screenshot_count, current_time, b_time))
+                            if cv2.imwrite(a_path, delayed_frame):
+                                screenshot_pairs.append((screenshot_count, a_capture_time, b_capture_time))
                                 screenshot_count += 1
                                 frames_since_last_screenshot = 0
                                 
                                 with open(log_path, 'a', encoding='utf-8') as log_file:
-                                    log_file.write(f"\nA{screenshot_count:02d}: {current_time:.1f}s ({change_percentage:.1f}% >= {change_threshold*100}%) -> {a_filename}\n")
-                        else:
-                            with open(log_path, 'a', encoding='utf-8') as log_file:
-                                log_file.write(f"\nSKIPPED A at {current_time:.1f}s (B would be at {b_time:.1f}s > {duration:.1f}s)\n")
-            else:
-                # Save first frame if B is possible and not within video end buffer
-                if current_time <= (duration - Config.VIDEO_END_BUFFER):
-                    b_time = current_time + 2.0
-                    if b_time < duration:
-                        a_filename = f"{screenshot_count:02d}_{format_time(current_time)}_A.jpg"
-                        a_path = os.path.join(raw_dir, a_filename)
-                        
-                        if cv2.imwrite(a_path, frame):
-                            screenshot_pairs.append((screenshot_count, current_time, b_time))
-                            screenshot_count += 1
-                            frames_since_last_screenshot = 0
-                            
-                            with open(log_path, 'a', encoding='utf-8') as log_file:
-                                log_file.write(f"\nINITIAL A{screenshot_count:02d}: {current_time:.1f}s -> {a_filename}\n")
+                                    log_file.write(f"\nINITIAL A{screenshot_count:02d}: {a_capture_time:.1f}s (+{Config.A_CAPTURE_DELAY}s delay) -> {a_filename}\n")
+                                
+                                # Return to original position for continued analysis
+                                cap.set(cv2.CAP_PROP_POS_MSEC, current_time * 1000)
                 else:
                     with open(log_path, 'a', encoding='utf-8') as log_file:
-                        log_file.write(f"\nSKIPPED INITIAL A at {current_time:.1f}s (within {Config.VIDEO_END_BUFFER}s buffer of video end at {duration:.1f}s)\n")
+                        log_file.write(f"\nSKIPPED INITIAL A at {current_time:.1f}s (delayed A would be at {a_capture_time:.1f}s within {Config.VIDEO_END_BUFFER}s buffer of video end at {duration:.1f}s)\n")
         
         # Update previous frame every check interval
         if frame_count % check_interval_frames == 0:
@@ -504,6 +758,88 @@ def _process_screenshots(main_folder, raw_dir, result_dir, duplicate_dir, saniti
     
     return True, result_dir
 
+def create_ocr_visual(image_path, ocr_numbers, bbox_info, output_path):
+    """
+    Create a visual representation of OCR results on the image.
+    Shows the crop region and detected numbers with bounding boxes.
+    """
+    try:
+        # Load original image
+        img = cv2.imread(str(image_path))
+        if img is None:
+            return False
+        
+        height, width = img.shape[:2]
+        
+        # Draw OCR crop region (top portion and configurable horizontal ratio)
+        crop_height = int(height * Config.OCR_CROP_RATIO)
+        crop_width = int(width * Config.OCR_HORIZONTAL_RATIO)
+        
+        # Draw green rectangle for OCR region
+        cv2.rectangle(img, (0, 0), (crop_width, crop_height), (0, 255, 0), 3)
+        
+        # Draw bounding box around detected number if available
+        if bbox_info and ocr_numbers:
+            print(f"  Drawing bbox for {ocr_numbers[0]} with bbox: {bbox_info}")
+            try:
+                # Convert bbox coordinates to integers and draw rectangle
+                bbox_points = [[int(p[0]), int(p[1])] for p in bbox_info]
+                bbox_array = np.array(bbox_points, np.int32)
+                
+                # Draw a thick yellow polygon around the detected number
+                cv2.polylines(img, [bbox_array], True, (0, 255, 255), 3)  # Yellow box for detected number
+                
+                # Also draw a filled semi-transparent rectangle for better visibility
+                overlay = img.copy()
+                cv2.fillPoly(overlay, [bbox_array], (0, 255, 255))
+                img = cv2.addWeighted(img, 0.8, overlay, 0.2, 0)  # 20% transparency
+                
+                # Add small text label at bbox with background
+                min_x = min(p[0] for p in bbox_points)
+                min_y = min(p[1] for p in bbox_points)
+                max_x = max(p[0] for p in bbox_points)
+                max_y = max(p[1] for p in bbox_points)
+                
+                # Draw text background rectangle
+                text = f"DETECTED: {ocr_numbers[0]}"
+                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
+                cv2.rectangle(img, (min_x-5, min_y-text_size[1]-10), 
+                             (min_x+text_size[0]+5, min_y-5), (0, 0, 0), -1)  # Black background
+                cv2.putText(img, text, (min_x, min_y-8), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)  # Yellow text
+                
+                # Draw crosshair at center of detected number
+                center_x = (min_x + max_x) // 2
+                center_y = (min_y + max_y) // 2
+                cv2.drawMarker(img, (center_x, center_y), (255, 0, 0), cv2.MARKER_CROSS, 20, 3)  # Blue crosshair
+                
+            except Exception as e:
+                print(f"Error drawing bbox: {e}")
+        else:
+            print(f"  No bbox to draw - bbox_info: {bbox_info is not None}, ocr_numbers: {ocr_numbers}")
+        
+        # Add text annotation for OCR region
+        cv2.putText(img, f"OCR Region: {Config.OCR_CROP_RATIO*100:.0f}% top x {Config.OCR_HORIZONTAL_RATIO*100:.0f}% left", 
+                   (10, height-60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
+        # Add OCR result text
+        ocr_text = f"OCR Result: {ocr_numbers if ocr_numbers else 'No numbers detected'}"
+        cv2.putText(img, ocr_text, 
+                   (10, height-30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        
+        # Add filename at top with black text for better visibility
+        filename = Path(image_path).name
+        cv2.putText(img, filename, 
+                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
+        
+        # Save annotated image
+        cv2.imwrite(str(output_path), img)
+        return True
+        
+    except Exception as e:
+        print(f"Error creating OCR visual for {image_path}: {e}")
+        return False
+
 def detect_duplicates_advanced(raw_dir, duplicate_dir, log_path):
     """
     Advanced duplicate detection with two tests:
@@ -522,6 +858,13 @@ def detect_duplicates_advanced(raw_dir, duplicate_dir, log_path):
     
     print(f"Analyzing {len(a_files)} A screenshots for duplicates...")
     
+    # Create OCR result folder (clear if exists)
+    main_folder = Path(raw_dir).parent.parent
+    ocr_result_dir = main_folder / "ocr_result"
+    if ocr_result_dir.exists():
+        shutil.rmtree(ocr_result_dir)
+    ocr_result_dir.mkdir(exist_ok=True)
+    
     duplicates = []
     top_ratio = Config.DUPLICATE_TOP_RATIO  # Compare top portion only
     
@@ -530,7 +873,8 @@ def detect_duplicates_advanced(raw_dir, duplicate_dir, log_path):
         log_file.write(f"Screenshots to analyze: {len(a_files)}\n")
         log_file.write(f"Analysis region: Top {Config.DUPLICATE_TOP_RATIO*100}% of each image\n")
         log_file.write(f"Test 1: {Config.PIXEL_SIMILARITY_THRESHOLD*100}% pixel similarity threshold\n")
-        log_file.write(f"Test 2: {Config.ROW_COVERAGE_THRESHOLD*100}% row similarity ({Config.ROW_SIMILARITY_THRESHOLD*100}% threshold per row)\n\n")
+        log_file.write(f"Test 2: {Config.ROW_COVERAGE_THRESHOLD*100}% row similarity ({Config.ROW_SIMILARITY_THRESHOLD*100}% threshold per row)\n")
+        log_file.write(f"Test 3: OCR number comparison (top {Config.OCR_CROP_RATIO*100}% of image)\n\n")
     
     # Compare each pair of A screenshots
     for i in range(len(a_files)):
@@ -567,44 +911,77 @@ def detect_duplicates_advanced(raw_dir, duplicate_dir, log_path):
             # Test 2: Row-wise comparison
             test2_passed = test_row_similarity(top1, top2, row_threshold=Config.ROW_SIMILARITY_THRESHOLD, coverage_threshold=Config.ROW_COVERAGE_THRESHOLD)
             
-            # If either test passes, it's a duplicate
+            # Only perform OCR if test 1 or test 2 passed (optimization)
             if test1_passed or test2_passed:
-                duplicates.append((i, j, file1.name, file2.name, test1_passed, test2_passed))
+                # Test 3: OCR comparison - if numbers are different, NOT a duplicate
+                ocr_numbers1, bbox1 = extract_ocr_numbers(str(file1))
+                ocr_numbers2, bbox2 = extract_ocr_numbers(str(file2))
                 
-                # Move duplicate pair to duplicate folder
-                pair_name = f"duplicate_pair_{len(duplicates):03d}"
+                # Print OCR results when tests pass
+                print(f"  OCR Results: {file1.name} = {ocr_numbers1}, {file2.name} = {ocr_numbers2}")
                 
-                # Copy both files to duplicate folder
-                shutil.copy2(file1, os.path.join(duplicate_dir, f"{pair_name}_A_{file1.stem}.jpg"))
-                shutil.copy2(file2, os.path.join(duplicate_dir, f"{pair_name}_B_{file2.stem}.jpg"))
+                # Create visual OCR results for this pair
+                pair_id = f"pair_{i:02d}_{j:02d}"
+                ocr_visual_1 = ocr_result_dir / f"{pair_id}_{file1.stem}_ocr.jpg"
+                ocr_visual_2 = ocr_result_dir / f"{pair_id}_{file2.stem}_ocr.jpg"
                 
-                # Also copy corresponding B screenshots if they exist
-                b1_name = file1.stem.replace('_A', '_B') + '.jpg'
-                b2_name = file2.stem.replace('_A', '_B') + '.jpg'
-                b1_path = Path(raw_dir) / b1_name
-                b2_path = Path(raw_dir) / b2_name
+                create_ocr_visual(str(file1), ocr_numbers1, bbox1, str(ocr_visual_1))
+                create_ocr_visual(str(file2), ocr_numbers2, bbox2, str(ocr_visual_2))
                 
-                if b1_path.exists():
-                    shutil.copy2(b1_path, os.path.join(duplicate_dir, f"{pair_name}_A_B_{b1_path.stem}.jpg"))
-                if b2_path.exists():
-                    shutil.copy2(b2_path, os.path.join(duplicate_dir, f"{pair_name}_B_B_{b2_path.stem}.jpg"))
+                ocr_different = compare_ocr_results(ocr_numbers1, ocr_numbers2)
                 
-                with open(log_path, 'a', encoding='utf-8') as log_file:
-                    log_file.write(f"DUPLICATE: {file1.name} vs {file2.name}\n")
-                    log_file.write(f"  Test 1 (pixel): {'PASS' if test1_passed else 'FAIL'}\n")
-                    log_file.write(f"  Test 2 (row): {'PASS' if test2_passed else 'FAIL'}\n")
-                    log_file.write(f"  Saved as: {pair_name}\n\n")
-                
-                # Enhanced terminal output showing which test detected the duplicate
-                test_info = ""
-                if test1_passed and test2_passed:
-                    test_info = " (Test 1 + Test 2)"
-                elif test1_passed:
-                    test_info = " (Test 1: Pixel)"
-                elif test2_passed:
-                    test_info = " (Test 2: Row)"
-                
-                print(f"  Duplicate found: {file1.name} ↔ {file2.name}{test_info}")
+                # Only consider it a duplicate if OCR numbers are NOT different
+                if not ocr_different:
+                    duplicates.append((i, j, file1.name, file2.name, test1_passed, test2_passed, ocr_different, ocr_numbers1, ocr_numbers2))
+                    
+                    # Move duplicate pair to duplicate folder
+                    pair_name = f"duplicate_pair_{len(duplicates):03d}"
+                    
+                    # Copy both files to duplicate folder
+                    shutil.copy2(file1, os.path.join(duplicate_dir, f"{pair_name}_A_{file1.stem}.jpg"))
+                    shutil.copy2(file2, os.path.join(duplicate_dir, f"{pair_name}_B_{file2.stem}.jpg"))
+                    
+                    # Also copy corresponding B screenshots if they exist
+                    b1_name = file1.stem.replace('_A', '_B') + '.jpg'
+                    b2_name = file2.stem.replace('_A', '_B') + '.jpg'
+                    b1_path = Path(raw_dir) / b1_name
+                    b2_path = Path(raw_dir) / b2_name
+                    
+                    if b1_path.exists():
+                        shutil.copy2(b1_path, os.path.join(duplicate_dir, f"{pair_name}_A_B_{b1_path.stem}.jpg"))
+                    if b2_path.exists():
+                        shutil.copy2(b2_path, os.path.join(duplicate_dir, f"{pair_name}_B_B_{b2_path.stem}.jpg"))
+                    
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f"DUPLICATE: {file1.name} vs {file2.name}\n")
+                        log_file.write(f"  Test 1 (pixel): {'PASS' if test1_passed else 'FAIL'}\n")
+                        log_file.write(f"  Test 2 (row): {'PASS' if test2_passed else 'FAIL'}\n")
+                        log_file.write(f"  Test 3 (OCR): {'SAME' if not ocr_different else 'DIFFERENT'}\n")
+                        log_file.write(f"  OCR Numbers 1: {ocr_numbers1}\n")
+                        log_file.write(f"  OCR Numbers 2: {ocr_numbers2}\n")
+                        log_file.write(f"  Saved as: {pair_name}\n\n")
+                    
+                    # Enhanced terminal output showing which test detected the duplicate
+                    test_info = ""
+                    if test1_passed and test2_passed:
+                        test_info = " (Test 1 + Test 2, OCR Same)"
+                    elif test1_passed:
+                        test_info = " (Test 1: Pixel, OCR Same)"
+                    elif test2_passed:
+                        test_info = " (Test 2: Row, OCR Same)"
+                    
+                    print(f"  Duplicate found: {file1.name} ↔ {file2.name}{test_info}")
+                else:
+                    # Log when similarity tests pass but OCR prevents duplicate classification
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f"NOT DUPLICATE (OCR DIFFERENT): {file1.name} vs {file2.name}\n")
+                        log_file.write(f"  Test 1 (pixel): {'PASS' if test1_passed else 'FAIL'}\n")
+                        log_file.write(f"  Test 2 (row): {'PASS' if test2_passed else 'FAIL'}\n")
+                        log_file.write(f"  Test 3 (OCR): DIFFERENT\n")
+                        log_file.write(f"  OCR Numbers 1: {ocr_numbers1}\n")
+                        log_file.write(f"  OCR Numbers 2: {ocr_numbers2}\n\n")
+                    
+                    print(f"  Not duplicate (OCR differs): {file1.name} ↔ {file2.name} (OCR: {ocr_numbers1} vs {ocr_numbers2})")
     
     with open(log_path, 'a', encoding='utf-8') as log_file:
         log_file.write(f"=== DUPLICATE DETECTION COMPLETE ===\n")
@@ -654,6 +1031,11 @@ def merge_unique_ab_screenshots(raw_dir, result_dir, duplicates, log_path):
     from pathlib import Path
     import shutil
     
+    # Clear result directory to ensure clean merge
+    if os.path.exists(result_dir):
+        shutil.rmtree(result_dir)
+    os.makedirs(result_dir, exist_ok=True)
+    
     # Get all A screenshots
     a_files = sorted([f for f in Path(raw_dir).glob("*_A.jpg")])
     
@@ -680,7 +1062,7 @@ def merge_unique_ab_screenshots(raw_dir, result_dir, duplicates, log_path):
         log_file.write(f"Later duplicate indices: {sorted(duplicate_indices)}\n")
         log_file.write(f"Unique A screenshots to merge: {len(unique_indices)}\n\n")
     
-    for idx in unique_indices:
+    for sequential_idx, idx in enumerate(unique_indices):
         if idx >= len(a_files):
             continue
             
@@ -692,7 +1074,7 @@ def merge_unique_ab_screenshots(raw_dir, result_dir, duplicates, log_path):
         time_match = re.search(r'(\d{2})_(\d{2})m(\d{2})s_A\.jpg', a_file.name)
         if time_match:
             file_idx, minutes, seconds = time_match.groups()
-            total_seconds = int(minutes) * 60 + int(seconds) + 2  # Add 2 seconds for B
+            total_seconds = int(minutes) * 60 + int(seconds) + int(Config.B_CAPTURE_DELAY)  # Add B capture delay
             b_minutes = total_seconds // 60
             b_seconds = total_seconds % 60
             b_name = f"{file_idx}_{b_minutes:02d}m{b_seconds:02d}s_B.jpg"
@@ -726,7 +1108,7 @@ def merge_unique_ab_screenshots(raw_dir, result_dir, duplicates, log_path):
         img_a[:, :left_width] = img_b[:, :left_width]
         
         # Save merged result
-        result_filename = f"{idx:02d}_{a_file.stem.replace('_A', '')}_merged.jpg"
+        result_filename = f"{sequential_idx:02d}_{a_file.stem.replace('_A', '')}_merged.jpg"
         result_path = os.path.join(result_dir, result_filename)
         
         if cv2.imwrite(result_path, img_a):
