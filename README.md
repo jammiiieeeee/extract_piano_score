@@ -2,12 +2,32 @@
 
 Automatically extract and convert piano tutorials from video to organized, printable PDF scores using intelligent content detection or fixed time intervals.
 
+## Project Structure
+
+This project has been reorganized for better file management:
+
+```
+extract_piano_score/
+├── code/                    # All source code files
+│   ├── main.py             # Main extraction script
+│   ├── create_pdf.py       # PDF generation utilities
+│   └── test_*.py           # Test utilities
+├── scores/                 # Generated scores and outputs
+│   └── [video_name]/       # Individual score folders
+│       ├── screenshots/    # Extracted screenshots
+│       ├── [title]_score.pdf  # Generated PDF
+│       └── source_video.mp4   # Copy of original video
+├── run_extraction.py       # Convenience wrapper script
+└── README.md              # This file
+```
+
 ## Features
 
 - **Two extraction methods**: Time-based intervals or intelligent content change detection
 - **Smart scene change detection**: Automatically stops extraction when major scene changes occur (>70% change)
 - **Unicode/Japanese filename support**: Handles complex characters in video filenames
-- **Organized output structure**: Creates main folders with screenshots and PDFs organized together
+- **Organized output structure**: Creates folders in `scores/` with screenshots, PDFs, and source video copies
+- **Video archiving**: Automatically copies source videos to each score folder for reference
 - **Detailed logging**: Comprehensive analysis logs with change percentages and timestamps
 - **Progress tracking**: Real-time progress bars with ETA estimates
 - **PDF generation**: Automatically creates cropped and stacked sheet music PDFs
@@ -25,6 +45,19 @@ pip install opencv-python Pillow reportlab
 ```
 
 ## Usage
+
+### Quick Start (Using Wrapper Script)
+From the main project directory, you can run extractions using the convenient wrapper:
+```bash
+python run_extraction.py "path/to/your/video.mp4" --create-pdf --custom-title "My Piano Score"
+```
+
+### Direct Usage (From Code Directory)
+Navigate to the code directory and run directly:
+```bash
+cd code
+python main.py "path/to/your/video.mp4" --create-pdf
+```
 
 ### Basic Usage
 Extract screenshots and create a PDF from a video:
@@ -44,6 +77,19 @@ Check if a video can be processed without extracting screenshots:
 python main.py "path/to/your/video.mp4" --test
 ```
 
+### Performance Optimization
+For faster processing, you can disable duplicate detection features:
+
+**Disable OCR only** (keeps pixel/row similarity tests):
+```bash
+python main.py "path/to/your/video.mp4" --disable-ocr --create-pdf
+```
+
+**Disable all duplicate detection** (fastest, keeps all screenshots):
+```bash
+python main.py "path/to/your/video.mp4" --disable-duplicate-detection --create-pdf
+```
+
 ## Parameters
 
 ### Screenshot Extraction (main.py):
@@ -55,8 +101,9 @@ python main.py "path/to/your/video.mp4" --test
 - `--test`: Test mode - check video properties without extracting
 - `--create-pdf`: Create PDF after extracting screenshots
 - `--crop-ratio`: Portion of height to keep from top for PDF (default: 0.32 = 32%)
-- `--strips-per-page`: Maximum strips per A4 page (default: 6)
-
+- `--strips-per-page`: Maximum strips per A4 page (default: 6)- `--recapture`: Force recapture of screenshots, replacing existing raw folder
+- `--disable-ocr`: Disable OCR testing in duplicate detection (faster processing)
+- `--disable-duplicate-detection`: Disable all duplicate detection (fastest processing, keeps all screenshots)
 ### PDF Creation (create_pdf.py):
 - `screenshots_dir`: Directory containing screenshots (required)
 - `--output`: Output PDF filename (default: "stacked_screenshots.pdf")
