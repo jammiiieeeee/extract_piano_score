@@ -1,5 +1,4 @@
 # Generated video processing results
-*/
 !*.py
 !*.md
 !*.txt
@@ -15,6 +14,9 @@
 *.avi
 *.mov
 *.mkv
+
+# the result folder
+scores/
 
 # Generated PDFs
 *.pdf
