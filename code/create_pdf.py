@@ -134,7 +134,11 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
         output_pdf: Output PDF filename
         crop_ratio: Portion of height to keep from top
         strips_per_page: Maximum number of strips per A4 page
-        song_title: Title to display on first page
+        song_title: Title to display on first page (None to skip title display)
+        
+    Note:
+        If song_title is None, no title will be displayed in the PDF content,
+        but the filename can still be customized separately via the output_pdf parameter.
     """
     # Get all screenshot files
     screenshot_files = []
@@ -199,7 +203,8 @@ def create_pdf_from_screenshots(screenshots_dir, output_pdf="stacked_screenshots
                 
                 print(f"Creating page {page_count} with {len(cropped_strips)} strips")
                 
-                # Add title on first page
+                # Add title on first page (only if song_title is provided and not None)
+                # This allows skipping title display when --skip-pdf-title flag is used
                 if is_first_page and song_title:
                     # Register and use Japanese font
                     font_name = register_japanese_font()
@@ -254,6 +259,7 @@ def main():
     parser.add_argument("--crop-ratio", type=float, default=0.32, help="Portion of height to keep from top (default: 0.32)")
     parser.add_argument("--strips-per-page", type=int, default=6, help="Maximum strips per A4 page (default: 6)")
     parser.add_argument("--title", help="Song title to display on first page")
+    parser.add_argument("--skip-title", action="store_true", help="Skip displaying title in PDF content")
     
     args = parser.parse_args()
     
@@ -261,12 +267,18 @@ def main():
         print(f"Error: Directory '{args.screenshots_dir}' does not exist.")
         return
     
+    # Determine title display: Skip if --skip-title flag is set, otherwise use provided title
+    display_title = None if args.skip_title else args.title
+    
+    if args.skip_title and args.title:
+        print("Note: Title provided but will be skipped in PDF content due to --skip-title flag")
+    
     success = create_pdf_from_screenshots(
         args.screenshots_dir, 
         args.output, 
         args.crop_ratio, 
         args.strips_per_page,
-        args.title
+        display_title
     )
     
     if not success:

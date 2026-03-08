@@ -2262,6 +2262,7 @@ def main():
     parser.add_argument("--test", action="store_true", help="Test mode: only check video properties without extracting screenshots")
     parser.add_argument("--create-pdf", action="store_true", help="Create PDF after extracting screenshots")
     parser.add_argument("--custom-title", type=str, help="Custom title for PDF filename and content (supports Japanese)")
+    parser.add_argument("--skip-pdf-title", action="store_true", help="Skip displaying title in PDF content (title still used for filename if --custom-title is provided)")
     parser.add_argument("--crop-ratio", type=float, default=0.32, help="Portion of height to keep from top for PDF (default: 0.32)")
     parser.add_argument("--strips-per-page", type=int, default=6, help="Maximum strips per A4 page (default: 6)")
     parser.add_argument("--recapture", action="store_true", help="Force recapture of screenshots, replacing existing raw folder")
@@ -2389,16 +2390,21 @@ def main():
                     pdf_title = args.custom_title if args.custom_title else sanitized_name
                     pdf_title_safe = sanitize_filename(pdf_title) if args.custom_title else sanitized_name
                     
+                    # Determine title display: Skip if --skip-pdf-title flag is set
+                    pdf_display_title = None if args.skip_pdf_title else pdf_title
+                    
                     pdf_filename = f"{pdf_title_safe}_score.pdf"
                     pdf_path = os.path.join(main_folder, pdf_filename)
                     
                     print(f"Creating PDF: {pdf_path}")
+                    if args.skip_pdf_title:
+                        print("  Note: PDF title display skipped (--skip-pdf-title flag)")
                     success = create_pdf_module.create_pdf_from_screenshots(
                         pdf_source_dir,  # Use the selected source directory
                         pdf_path, 
                         args.crop_ratio, 
                         args.strips_per_page,
-                        pdf_title  # Pass original title (with Japanese chars)
+                        pdf_display_title  # Pass None if skip flag is set, otherwise original title
                     )
                     
                     if success:
