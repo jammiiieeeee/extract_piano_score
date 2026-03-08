@@ -102,7 +102,7 @@ class Config:
     PROGRESS_UPDATE_INTERVAL = 0.2         # Progress update every 0.2 seconds
     
     # ---- PDF Generation Defaults ----
-    DEFAULT_CROP_RATIO = 0.32              # Default PDF crop ratio (32% from top)
+    DEFAULT_CROP_RATIO = 0.35              # Default PDF crop ratio (32% from top)
     DEFAULT_STRIPS_PER_PAGE = 7            # Default strips per PDF page
     
     # ---- OCR Configuration ----
@@ -141,8 +141,7 @@ def extract_ocr_numbers(image_path):
                 # 
                 results = ocr.ocr(img_array)
                 
-                # Debug: print raw OCR results to help troubleshoot
-                # print(f"  Debug OCR raw results for {os.path.basename(image_path)}: {results}")
+
 
                 if not results:
                     return []
@@ -394,7 +393,7 @@ def extract_screenshots(video_path, start_time=2, interval=12, detection_method=
     #   ├── [sanitized_name]_log.txt
     #   ├── [sanitized_name]_similarity_heatmap.html
     #   └── source_video.mp4   # Copy of original video
-    scores_dir = os.path.join(os.path.dirname(os.getcwd()), "scores")
+    scores_dir = os.path.join(os.getcwd(), "scores")  # Save in project directory
     os.makedirs(scores_dir, exist_ok=True)
     main_folder = os.path.join(scores_dir, ascii_folder_name)
     screenshots_dir = os.path.join(main_folder, "screenshots")
@@ -1122,9 +1121,7 @@ def merge_unique_ab_screenshots(raw_dir, result_dir, duplicates, log_path):
         # Keep the earlier one (smaller index), mark later one as duplicate
         duplicate_indices.add(max(dup[0], dup[1]))  # Mark the LATER one as duplicate
     
-    print(f"Debug: Total A files: {len(a_files)}")
-    print(f"Debug: Duplicate pairs: {len(duplicates)}")
-    print(f"Debug: Duplicate indices to remove: {sorted(duplicate_indices)}")
+
     
     # Get unique indices (all indices EXCEPT the later duplicates)
     unique_indices = []
@@ -1132,7 +1129,7 @@ def merge_unique_ab_screenshots(raw_dir, result_dir, duplicates, log_path):
         if i not in duplicate_indices:
             unique_indices.append(i)
     
-    print(f"Debug: Unique indices remaining: {sorted(unique_indices)}")
+
     print(f"Merging {len(unique_indices)} unique A screenshots with their B counterparts...")
     
     merged_count = 0
@@ -1165,7 +1162,7 @@ def merge_unique_ab_screenshots(raw_dir, result_dir, duplicates, log_path):
             else:
                 with open(log_path, 'a', encoding='utf-8') as log_file:
                     log_file.write(f"WARNING: No B file found for {a_file.name} (searched pattern: {b_pattern})\n")
-                print(f"DEBUG: Missing B file - A: {a_file.name}, Pattern: {b_pattern}")
+
                 continue
         else:
             # Fallback to simple replacement if pattern doesn't match
@@ -2357,7 +2354,7 @@ def main():
         sanitized_name = sanitize_filename(video_name)
         
         # Use ASCII folder name for file operations (to avoid Unicode path issues)
-        scores_dir = os.path.join(os.path.dirname(os.getcwd()), "scores")
+        scores_dir = os.path.join(os.getcwd(), "scores")  # Save in project directory
         main_folder = os.path.join(scores_dir, ascii_folder_name)
         
         # Prefer result folder (merged screenshots) if it exists, otherwise use main screenshots folder
